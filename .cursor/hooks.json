@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": ".cursor/hooks/traces-session-env.sh",
+        "timeout": 5
+      },
+      {
+        "command": "traces hook agent session-start --agent cursor"
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "traces hook agent prompt-submitted --agent cursor"
+      }
+    ],
+    "stop": [
+      {
+        "command": "traces hook agent agent-done --agent cursor"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "traces hook agent session-end --agent cursor"
+      }
+    ]
+  }
+}

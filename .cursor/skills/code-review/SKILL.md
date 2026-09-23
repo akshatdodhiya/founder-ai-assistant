@@ -1,34 +1,29 @@
 ---
-description: Two-axis review of changes against repository standards and the originating specification.
+name: code-review
+description: Audit changes against ARCHITECTURE.md, secret hygiene, and production standards.
 ---
 
 # Code Review Protocol
 
-Execute a two-axis review of the local git diff relative to the `main` branch.
+Inspect all staged or recently modified files before committing.
 
 ## Review Axes
 
-### Axis 1: Standards & Code Smells
-Review the diff against `CODING_STANDARDS.md` (if present) and flag Fowler code smells:
-- **Mysterious Name:** Functions, variables, or types with uninformative names.
-- **Duplicated Code:** Identical or near-identical logic in multiple places.
-- **Feature Envy:** A function reaching extensively into another object's data.
-- **Primitive Obsession:** Using raw strings/integers instead of domain objects.
-- **Shotgun Surgery:** A single logical change forcing scattered edits across many files.
-- **Speculative Generality:** Abstractions, hooks, or parameters added for hypothetical future needs.
+### 1. Secret Hygiene & Safety (CRITICAL)
+- Confirm **NO raw API keys** (OpenRouter, OpenAI) exist in code, docstrings, or test files.
+- Verify all API keys are strictly retrieved via `os.getenv("OPENROUTER_API_KEY")`.
+- Verify `.env` is listed in `.gitignore`.
 
-### Axis 2: Specification Alignment
-Check local implementation against the originating spec or GitHub Issue:
-- **Missing Requirements:** Specs asked for but not implemented.
-- **Scope Creep:** Behavior added that was not requested in the spec/issue.
-- **Incorrect Logic:** Features implemented in ways that violate `CONTEXT.md` rules.
+### 2. Architectural Alignment
+- Compare the diff against `ARCHITECTURE.md`:
+  - Does all ingested data normalize to the canonical `ContextItem` Pydantic model?
+  - Are ChromaDB metadata fields restricted to flat primitive types (`str`, `int`, `float`, `bool`)?
+  - Does the synthesizer enforce grounding with source citations and a fallback for empty context?
 
-### Axis 3: Architectural Drift Check
-Compare the git diff (`git diff main...HEAD`) directly against `ARCHITECTURE.md`:
-- Did this code introduce a new library, database pattern, or API structure not documented in `ARCHITECTURE.md`?
-- Did this code alter a core business rule defined in `ARCHITECTURE.md`?
-
-**Action:** If architectural drift is detected and no corresponding ADR exists in `docs/adr/`, mark the review as **FAILED**. Inform the user that they must execute `/pivot` to update the architecture before this branch can be shipped.
+### 3. Engineering Quality
+- Check for Fowler code smells: mysterious variable names, unhandled exceptions, and dead code.
+- Ensure all public functions have clear Python type annotations.
 
 ## Output Format
-Present findings clearly split into `## Standards` and `## Spec` sections. Categorize findings as **Critical** (must fix before commit) or **Warning** (judgement call).
+- **PASS:** State that the module satisfies all invariants and is safe to commit.
+- **FAIL:** List the exact blocker (e.g., "Leaked API key on line 14" or "Direct dict passed instead of ContextItem") and stop execution until fixed.
