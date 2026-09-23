@@ -42,7 +42,7 @@ These literals are used across tests. Do not recompute them inside assertions.
 
 ## Settled decisions
 
-Recorded as ADR-0003 through ADR-0006. `ARCHITECTURE.md` is rewritten. Each item is the live contract.
+Recorded as ADR-0003 through ADR-0007. `ARCHITECTURE.md` is rewritten. Each item is the live contract.
 
 - [x] **Storage returns `list[ContextItem]`** (ADR-0003).
 - [x] **Storage adds `title` to Chroma metadata at write time** (ADR-0003).
@@ -56,6 +56,7 @@ Recorded as ADR-0003 through ADR-0006. `ARCHITECTURE.md` is rewritten. Each item
 - [x] **Embeddings** use Chroma's default local model (ADR-0003).
 - [x] **CLI entrypoint** is `python main.py` (ADR-0006).
 - [x] **Empty description or body is accepted**; only a missing field raises `NormalizationError`.
+- [x] **Router classification is System 1, not a frontier LLM** (ADR-0007). Jev returns typed intent and time-window labels. Python builds every `SearchPlan` and every epoch bound. Ingestion does not call Jev. The frontier LLM is reserved for synthesis. Public `plan_query` and `retrieve` signatures stay as specified below. `SearchPlan` gains no new fields.
 
 ---
 
@@ -191,58 +192,80 @@ Commit: `1224f40`
 
 ## Milestone 4: Query router
 
+Document the classifier as **ADR-0007**. It does not fit inside ADR-0005. That ADR's decision text says the model selects the windows and that invalid JSON is retried. Replacing the frontier JSON call removes that mechanism. ADR-0005 stays the record for multi-plan retrieval, `order_by`, the five windows, the reference timestamp, and the ban on unfiltered search. ADR-0007 supersedes only the "who classifies" sentence. Section 4.3 of `ARCHITECTURE.md` is rewritten so the JSON-mode instruction is gone.
+
+**Why not edit ADR-0005 in place.** It also locks decisions this slice still obeys (ADR-0002 unions, time windows, no unfiltered fallback). Rewriting it would erase those. A later reader must see both: 0005 for retrieval shape, 0007 for classification.
+
+**Pattern.** Jev (TypeSafe AI System 1) answers typed choice questions in one call: intent and time window. It returns a label we defined, plus probabilities. It does not emit `SearchPlan` JSON, epochs, or prose. Python maps those labels onto plans and fills epoch bounds from `compute_windows`. Narrative generation stays in milestone 5.
+
 **Files**
 
 - `src/engine/router.py`
-- `src/engine/llm.py` (a thin OpenRouter client shared with the synthesizer)
+- `src/engine/classifier.py` (injectable Jev client on OpenRouter System One)
 - `tests/test_router.py`
-- `requirements.txt` (add `openai` and `python-dotenv`)
-- `.env.example` (`OPENROUTER_API_KEY=`, no value)
+- `requirements.txt` (add `httpx` only if the Jev client needs it; do not add `openai` here)
+- `.env.example` (`OPENROUTER_API_KEY=` empty; commented `FOUNDER_REFERENCE_TIME`)
 
-**Inputs and outputs**
+**Inputs and outputs** (unchanged public signatures)
 
 - `plan_query(query: str, reference: datetime) -> list[SearchPlan]`
-- `build_where(plan: SearchPlan) -> dict | None`: a pure function that turns a plan into a Chroma filter.
-- `retrieve(query: str, store: ContextStore, reference: datetime) -> list[ContextItem]`: runs every plan (`search` for similarity plans, `fetch` for time plans), removes duplicate ids, and sorts by timestamp.
+- `build_where(plan: SearchPlan) -> dict | None`
+- `retrieve(query: str, store: ContextStore, reference: datetime) -> list[ContextItem]`
 - Reference timestamp: `FOUNDER_REFERENCE_TIME` if set, otherwise `2026-09-23T09:00:00Z`.
+- The classifier is a constructor argument, not part of the public signature, so tests pass a fake that returns labels and never touch the network.
+
+**Label contract**
+
+- Intent choice: `focus_today`, `follow_ups`, `repeated_customer`, `next_meeting`, `general`.
+- Window choice: `today`, `yesterday`, `tomorrow`, `this_week`, `next_meeting`, `none`.
+- `focus_today` always becomes two plans (calendar in the day window, union action-required email in the day window), ignoring a conflicting window label.
+- `next_meeting` forces calendar, `order_by="time"`, and a start bound of reference epoch + 1. Limit 1 is applied inside `retrieve`, not as a new schema field.
+- `follow_ups` and any other action-required email plan use time order and the open-thread rule.
+- `repeated_customer` is similarity search over email, semantic query fixed in code, no time filter unless the window label is not `none`.
+- `general` is one similarity plan. A window label other than `none` adds that window. `none` adds no time filter.
+- `requires_action` is never set on a calendar plan.
+
+**Schemas.** Do not add fields to `ContextItem` or `SearchPlan` for this pivot. `order_by` is already required by ADR-0005 and section 3; the Python model is behind that contract and is updated only to match it. No `limit` field.
 
 **Tasks**
 
-- [x] `/pivot` is done for the router decisions (plan list, ordering mode, time phrases, per-thread follow-ups, retry).
-- [ ] Red: write tests for `build_where` and the time-window math first. Both are deterministic and need no LLM.
-- [ ] Red: write tests for `plan_query` with the LLM client replaced at the HTTP boundary.
-- [ ] Green: implement the OpenRouter call with `openai/gpt-4o-mini` in JSON mode, then validate the response into `list[SearchPlan]`.
-- [ ] Compute the five windows (today, yesterday, tomorrow, this week, next meeting) in code from the reference timestamp, and give the exact epochs to the model in the prompt. The model picks a window; it never does date math.
-- [ ] Follow-ups: for action-required email hits, `fetch` every message in their threads and keep only threads whose latest message requires action.
-- [ ] Retry the LLM call once on timeout, HTTP 429, or invalid JSON, then raise a typed planning error.
-- [ ] Read the key via `python-dotenv` and `os.getenv("OPENROUTER_API_KEY")` only.
+- [x] `/pivot` is done for multi-plan retrieval, ordering, time phrases, and per-thread follow-ups (ADR-0005, ADR-0002, ADR-0004).
+- [x] Write ADR-0007 and rewrite `ARCHITECTURE.md` section 4.3 so the frontier JSON planner is gone. Update `CONTEXT.md` with the classification rule only (no paths).
+- [ ] Bring `SearchPlan.order_by` in line with section 3. Add no other model fields.
+- [ ] Red: tests for `compute_windows` and `build_where`. No classifier.
+- [ ] Red: tests for `plan_query` and `retrieve` with a fake classifier returning labels.
+- [ ] Green: deterministic plan builder plus a thin Jev client. Key only from `os.getenv("OPENROUTER_API_KEY")` via `python-dotenv`. One `POST https://openrouter.ai/api/v1/systemone` call, model `typesafe/jev-1.13`.
+- [ ] On timeout or HTTP 429, retry the classifier once, then raise `PlanningFailure`. Never search without a plan. A missing key raises immediately.
+- [ ] Open-thread rule on every action-required email plan, including the focus-set email plan.
 
 **Acceptance (pytest checks)**
 
 - [ ] `build_where` with no filters returns `None`.
 - [ ] `build_where` with only `source_filter="email"` returns `{"source": "email"}` (no `$and`).
 - [ ] `build_where` with source, action, and epoch bounds returns one `$and` holding all four clauses.
-- [ ] A canned LLM response for "What should I focus on today?" yields two plans: calendar in the window, and action-required email in the window.
-- [ ] `retrieve` on the evaluation corpus returns exactly the focus set ids from the reference table, in time order.
-- [ ] `retrieve` for follow-ups returns exactly `email_203`, `email_204`, `email_205`.
-- [ ] A follow-up thread whose latest message has `requires_action: false` is excluded (fixture test).
+- [ ] A canned `focus_today` classification yields two plans: calendar in the day window, and action-required email in the day window.
+- [ ] `retrieve` on the evaluation corpus returns the focus set ids from the reference table, earliest first.
+- [ ] Follow-ups return `email_204`, `email_205`, `email_203` (latest message per open thread, earliest first).
+- [ ] A thread whose latest message has `requires_action: false` is excluded.
 - [ ] "What's my next meeting?" returns exactly `cal_001`.
 - [ ] The week window for the anchor is `1789948800`–`1790553599`.
 - [ ] `FOUNDER_REFERENCE_TIME` moves every window.
-- [ ] One invalid LLM response followed by a valid one succeeds. Two invalid responses raise a typed planning error, and no search runs.
+- [ ] One classifier failure followed by a valid classification succeeds. Two failures raise `PlanningFailure`, and no search runs.
+- [ ] No test calls OpenRouter or Jev.
 - [ ] `pytest tests/` passes.
 
 **Edge cases**
 
-- Models sometimes wrap JSON in markdown fences, return epochs as strings, or add extra keys. Validate strictly and fail with a clear error.
-- Handle timeouts, rate limits (HTTP 429), and a missing API key with typed errors. Never fall back to an ungrounded answer.
-- `time_start_epoch` greater than `time_end_epoch` is invalid and must be rejected.
-- A query with no time phrase must not get a day window added.
+- Jev can only return criteria keys we sent, so there is no JSON-schema retry. A transport failure is the only retry.
+- Low confidence still uses the winning label. Do not add a second model or an unfiltered fallback.
+- `time_start_epoch` greater than `time_end_epoch` cannot be produced by `compute_windows`. `build_where` still rejects it if a plan is built by hand.
+- A `general` query with window `none` gets no day window.
 
 **Do not break**
 
 - `requires_action` is never applied to calendar plans (ADR-0002).
 - The router only plans. It never answers the question.
+- The frontier LLM is not imported by the router.
 
 ---
 

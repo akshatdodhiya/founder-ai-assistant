@@ -12,13 +12,13 @@ A local context engine designed to ingest disparate operational feeds (Google Ca
 * **Typed Round-Trip**: Every record leaving storage is a `ContextItem` identical to the one ingested, including title and timestamp. *(See ADR-0003)*
 * **Grounded Retrieval Over Pure Tool Calling**: Answers must be derived strictly from stored context retrieved through vector and metadata queries rather than zero-shot LLM speculation or live API calls.
 * **Decoupled Adapter Layer**: Connectors simulate production API payloads (`calendar.json`, `emails.json`), allowing real Google APIs or integration platforms like Composio/Nango to be substituted without modifying storage or synthesis logic.
-* **OpenRouter LLM Integration**: Route requests and synthesize final answers using the provided OpenRouter API endpoint. Router failures retry once, then raise a Planning Failure. They never fall back to an unfiltered search. *(See ADR-0005)*
+* **OpenRouter Integration**: One `OPENROUTER_API_KEY` authorizes Jev question classification and later synthesis. Classification failures retry once, then raise a Planning Failure. They never fall back to an unfiltered search. *(See ADR-0007)*
 
 ---
 
 ## 2. Directory Layout & Module Responsibilities
 
-*(See ADR-0001, ADR-0006)*
+*(See ADR-0001, ADR-0006, ADR-0007)*
 
 ```text
 founder-assistant/
@@ -34,7 +34,8 @@ founder-assistant/
 │   ├── connectors/         # BaseConnector interface and source adapters
 │   ├── storage/            # Persistent ChromaDB client and metadata indexer
 │   ├── engine/
-│   │   ├── router.py       # Query decomposition and OpenRouter search planning
+│   │   ├── classifier.py   # Jev question classification via OpenRouter System One
+│   │   ├── router.py       # Search plans built from classifier labels
 │   │   └── synthesizer.py  # Grounded response generation with source citations
 │   └── cli/
 │       └── main.py         # Interactive CLI loop and evaluation test harness
@@ -153,28 +154,33 @@ class SearchPlan(BaseModel):
   * If epoch timestamps are provided, apply Chroma `$gte` and `$lte` on `timestamp_epoch`.
   * Combine two or more clauses with `$and`. A single clause is a plain dict. An empty filter is `None`, not `{}`.
 
-### 4.3 Query Router (`src/engine/router.py`)
+### 4.3 Query Router (`src/engine/router.py`, `src/engine/classifier.py`)
 
-*(See ADR-0002, ADR-0005)*
+*(See ADR-0002, ADR-0005, ADR-0007)*
 
-Direct vector search fails on relative temporal queries ("today", "this week", "next meeting"). The Router runs an LLM call via OpenRouter (`openai/gpt-4o-mini`) using JSON mode to extract one or more structured plans.
+Direct vector search fails on relative temporal queries ("today", "this week", "next meeting"). Jev classifies the founder's question. Python builds the plans. Ingestion does not call Jev. Source `requires_action` and `category` stay as the connector stored them.
 
 1. **Inputs**: Raw user query + Reference Timestamp. Default `2026-09-23T09:00:00Z`, overridden by `FOUNDER_REFERENCE_TIME`. Never implicit wall clock.
-2. **Window math (in code, not by the model)**:
+2. **Classifier**: One `POST https://openrouter.ai/api/v1/systemone` call, model `typesafe/jev-1.13`, authorized by `OPENROUTER_API_KEY`. Two choice questions:
+   * Intent: `focus_today`, `follow_ups`, `repeated_customer`, `next_meeting`, `general`.
+   * Window: `today`, `yesterday`, `tomorrow`, `this_week`, `next_meeting`, `none`.
+   * The winning label is used even at low confidence. Jev does not emit a SearchPlan, an epoch, or prose.
+3. **Window math (in code, not by the classifier)**:
 
    * today: UTC day containing the Reference Timestamp
    * yesterday / tomorrow: the UTC days before and after that day
    * this week: Monday 00:00:00 through Sunday 23:59:59 UTC of the week containing the Reference Timestamp
    * next meeting: calendar items with `timestamp` strictly after the Reference Timestamp
-   * any other phrase: no time filter
-3. **Output**: `list[SearchPlan]`. The model selects among the windows above using the exact epoch values supplied in the prompt. It never computes dates itself.
-4. **Execution (`retrieve`)**:
+   * `none`, or any other phrase: no time filter
+   * `focus_today` always uses the day window for both plans and ignores a conflicting window label
+4. **Output**: `list[SearchPlan]`. `next_meeting` forces `source=calendar`, `order_by="time"`, and a start bound of reference epoch + 1, with limit 1 applied in `retrieve`. `requires_action` is never set on a calendar plan.
+5. **Execution (`retrieve`)**:
 
    * `order_by="similarity"` calls `search`.
-   * `order_by="time"` calls `fetch` (next meeting uses `source=calendar`, `time_start_epoch` exclusive of the Reference Timestamp, `limit=1`).
+   * `order_by="time"` calls `fetch`.
    * Union results, drop duplicate ids, sort remaining items by timestamp.
-5. **Follow-ups**: After retrieving action-required emails, `fetch` every message in those threads. Keep a thread only when its latest message, of any kind, requires action. Represent the thread by that latest message. *(See ADR-0004)*
-6. **Failure**: Timeout, HTTP 429, or invalid JSON is retried once. A second failure raises a Planning Failure. No unfiltered search is issued.
+6. **Follow-ups**: After retrieving action-required emails, `fetch` every message in those threads. Keep a thread only when its latest message, of any kind, requires action. Represent the thread by that latest message. The same rule applies to every action-required email plan, including the email half of the focus set. *(See ADR-0004)*
+7. **Failure**: Timeout or HTTP 429 is retried once. A second failure raises a Planning Failure. A missing key is not retried. No unfiltered search is issued. There is no invalid-JSON retry, because Jev can only return the criteria keys that were sent.
 
 ### 4.4 Synthesis Layer (`src/engine/synthesizer.py`)
 
@@ -188,7 +194,7 @@ Direct vector search fails on relative temporal queries ("today", "this week", "
 
 ## 5. Primary Test Scenarios & Expected Routing
 
-*(See ADR-0002, ADR-0004, ADR-0005)*
+*(See ADR-0002, ADR-0004, ADR-0005, ADR-0007)*
 
 The implementation must deterministically answer the core founder workflows. The default Reference Timestamp is `2026-09-23T09:00:00Z`. The day window is that UTC calendar day, from `2026-09-23T00:00:00Z` (`1790121600`) through `2026-09-23T23:59:59Z` (`1790207999`) inclusive. The week window is Monday `2026-09-21T00:00:00Z` (`1789948800`) through Sunday `2026-09-27T23:59:59Z` (`1790553599`).
 

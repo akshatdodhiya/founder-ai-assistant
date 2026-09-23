@@ -16,6 +16,8 @@
 - **Follow-up**: A Thread whose latest message, of any kind, requires action. It is represented by that latest message. A later message without Requires Action closes the Thread. _Avoid_: action-required email, unread email.
 - **Repeated Issue**: A customer problem reported in two or more emails. Messages in the same Thread count separately. _Avoid_: duplicate, recurring ticket.
 - **Search Plan**: One filtered retrieval over the context layer, ordered either by similarity (default) or by time (earliest first). A question resolves to one or more Search Plans. _Avoid_: query, filter.
+- **Query Intent**: One of focus today, follow-ups, repeated customer issue, next meeting, or general. Chosen from the founder's question, never from an email. _Avoid_: prompt, JSON plan.
+- **Time Window**: One of today, yesterday, tomorrow, this week, next meeting, or none. Bounds are computed from the Reference Timestamp, never by the classifier. _Avoid_: model date, epoch guess.
 - **Normalization Error**: Rejection of a raw payload that cannot become a Context Item. Ingestion emits no partial item. _Avoid_: skip, best effort.
 - **Storage Error**: A stored record that cannot become a Context Item. Retrieval emits no partial item. _Avoid_: skip, corrupt row.
 - **Planning Failure**: The router could not produce valid Search Plans after one retry. The question is answered with an error, never with an unfiltered or ungrounded answer. _Avoid_: fallback search.
@@ -29,11 +31,14 @@
 - Follow-up detection looks at the latest message of every Thread, not only at messages flagged Requires Action.
 - An empty event description or email body is valid. A missing field is a Normalization Error.
 - Re-ingesting the same records never creates duplicates.
+- Requires Action and category on an email come from the source record. Ingestion does not reclassify them.
+- A low-confidence choice still uses the winning label.
+- Classification and synthesis share one provider credential.
 
 ## Current System State
-- **Phase**: Central Context Storage.
+- **Phase**: Architecture pivot for query routing is recorded. Router code is next.
 - **Active Data Sources**: Mock Google Calendar (`calendar.json`), Mock Gmail (`emails.json`).
-- **Target LLM Provider**: OpenRouter API. Router calls are retried once before a Planning Failure.
+- **Target Provider**: OpenRouter. Question classification uses a typed decision model. Synthesis uses a chat model. Both use the same credential. A failed classification is retried once before a Planning Failure.
 - **Embeddings**: Local embedding model. Ingestion needs no API key; the first run downloads the model.
 - **Primary Evaluation Queries**:
   1. "What should I focus on today?"
