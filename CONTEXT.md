@@ -17,18 +17,21 @@
 - **Repeated Issue**: A customer problem reported in two or more emails. Messages in the same Thread count separately. _Avoid_: duplicate, recurring ticket.
 - **Search Plan**: One filtered retrieval over the context layer, ordered either by similarity (default) or by time (earliest first). A question resolves to one or more Search Plans. _Avoid_: query, filter.
 - **Normalization Error**: Rejection of a raw payload that cannot become a Context Item. Ingestion emits no partial item. _Avoid_: skip, best effort.
+- **Storage Error**: A stored record that cannot become a Context Item. Retrieval emits no partial item. _Avoid_: skip, corrupt row.
 - **Planning Failure**: The router could not produce valid Search Plans after one retry. The question is answered with an error, never with an unfiltered or ungrounded answer. _Avoid_: fallback search.
 
 ## Business Rules & Invariants
 - Relative time phrases resolve only to these windows: today (Day Window), yesterday and tomorrow (the UTC days before and after the Day Window), this week (Week Window), and next meeting (Next Meeting). Any other phrase gets no time filter.
 - When a question resolves to several Search Plans, their results are unioned, de-duplicated by Context Item id, and presented in chronological order.
-- A Context Item read back from the context layer is identical to the one ingested, including its title and timestamp. Retrieval always returns Context Items, never raw records.
+- A Context Item read back from the context layer is identical to the one ingested, including its title and timestamp. The stored copy of title is not part of Context Item metadata after read. Retrieval always returns Context Items, never raw records.
+- An empty ingest is a no-op.
+- Unfiltered fetch returns every Context Item in chronological order.
 - Follow-up detection looks at the latest message of every Thread, not only at messages flagged Requires Action.
 - An empty event description or email body is valid. A missing field is a Normalization Error.
 - Re-ingesting the same records never creates duplicates.
 
 ## Current System State
-- **Phase**: Ingestion and schema definition complete, including thread identity on email Context Items. Next: Central Context Storage.
+- **Phase**: Central Context Storage.
 - **Active Data Sources**: Mock Google Calendar (`calendar.json`), Mock Gmail (`emails.json`).
 - **Target LLM Provider**: OpenRouter API. Router calls are retried once before a Planning Failure.
 - **Embeddings**: Local embedding model. Ingestion needs no API key; the first run downloads the model.

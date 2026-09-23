@@ -154,22 +154,22 @@ Commit: `1224f40`
 **Tasks**
 
 - [x] `/pivot` is done for the storage decisions (return type, stored `title`).
-- [ ] Red: write `tests/test_storage.py` against a real Chroma client in `tmp_path`.
-- [ ] Green: implement `ContextStore`.
-- [ ] Ingest with `upsert`, not `add`, so running ingestion twice is safe.
-- [ ] Add `title` to the stored metadata; rebuild `ContextItem` from document, metadata, and `timestamp_epoch`.
-- [ ] Make the embedding function injectable. Filter tests use a small deterministic embedding, so they never depend on a model download.
+- [x] Red: write `tests/test_storage.py` against a real Chroma client in `tmp_path`.
+- [x] Green: implement `ContextStore`.
+- [x] Ingest with `upsert`, not `add`, so running ingestion twice is safe.
+- [x] Add `title` to the stored metadata; rebuild `ContextItem` from document, metadata, and `timestamp_epoch`.
+- [x] Make the embedding function injectable. Filter tests use a small deterministic embedding, so they never depend on a model download.
 
 **Acceptance (pytest checks)**
 
-- [ ] Storage tests build their own `ContextItem` literals (two meetings and two emails, one of each outside the day window). Upserting them gives `count() == 4`. Upserting the same items again still gives 4.
-- [ ] `where={"source": "email"}` returns only email items.
-- [ ] `where={"requires_action": True}` returns no calendar items.
-- [ ] An epoch-range `where` with `$gte` / `$lte` excludes items outside `1790121600`–`1790207999`.
-- [ ] A search hit round-trips to a `ContextItem` equal to the original item.
-- [ ] `fetch(where={"source": "calendar"}, limit=1)` returns the earliest meeting, regardless of similarity.
-- [ ] Data survives closing and reopening the client on the same path.
-- [ ] `pytest tests/` passes (all earlier tests are still green).
+- [x] Storage tests build their own `ContextItem` literals (two meetings and two emails, one of each outside the day window). Upserting them gives `count() == 4`. Upserting the same items again still gives 4.
+- [x] `where={"source": "email"}` returns only email items.
+- [x] `where={"requires_action": True}` returns no calendar items.
+- [x] An epoch-range `where` with `$gte` / `$lte` excludes items outside `1790121600`–`1790207999`.
+- [x] A search hit round-trips to a `ContextItem` equal to the original item.
+- [x] `fetch(where={"source": "calendar"}, limit=1)` returns the earliest meeting, regardless of similarity.
+- [x] Data survives closing and reopening the client on the same path.
+- [x] `pytest tests/` passes (all earlier tests are still green).
 
 **Edge cases**
 
