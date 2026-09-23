@@ -30,7 +30,7 @@ class MockGmailConnector(BaseConnector):
             body = require_str(record, "body", allow_empty=True)
             category = require_str(record, "category")
             raw_id = require_str(record, "id")
-            require_str(record, "thread_id")
+            thread_id = require_str(record, "thread_id")
             items.append(
                 ContextItem(
                     id=f"email_{raw_id}",
@@ -42,6 +42,7 @@ class MockGmailConnector(BaseConnector):
                         "source": "email",
                         "timestamp_epoch": int(timestamp.timestamp()),
                         "sender": sender,
+                        "thread_id": thread_id,
                         "requires_action": requires_action,
                         "category": category,
                     },

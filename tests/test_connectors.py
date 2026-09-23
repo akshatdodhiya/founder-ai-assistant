@@ -43,6 +43,7 @@ def test_email_record_normalizes_to_context_item() -> None:
                 "source": "email",
                 "timestamp_epoch": 1790173800,
                 "sender": "Alex",
+                "thread_id": "thr_9",
                 "requires_action": True,
                 "category": "investor",
             },
