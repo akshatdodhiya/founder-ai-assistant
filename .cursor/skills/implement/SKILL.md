@@ -29,8 +29,10 @@ Implement the module specified by the user adhering strictly to `ARCHITECTURE.md
 
 5. **Atomic Commit:**
    - Stage modified files and execute a local git commit on `main`:
+     example:
      ```bash
      git add src/ tests/
      git commit -m "feat(<module>): implement <concise description of feature>"
      ```
+   - Commit all those files that were related to the feature.  
    - Notify the user that the module is complete, verified by tests, and committed.
