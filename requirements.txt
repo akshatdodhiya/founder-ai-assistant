@@ -1,3 +1,4 @@
 pydantic>=2.0
 pytest>=8.0
 chromadb>=0.5
+python-dotenv>=1.0

@@ -44,3 +44,11 @@ class SearchPlan(BaseModel):
     requires_action_only: bool = Field(
         False, description="Filter for unread/action-required emails or blockers"
     )
+    order_by: Literal["similarity", "time"] = Field(
+        "similarity",
+        description="similarity uses vector search; time uses filter-only fetch, earliest first",
+    )
+    order_by: Literal["similarity", "time"] = Field(
+        "similarity",
+        description="similarity uses vector search; time uses filter-only fetch, earliest first",
+    )

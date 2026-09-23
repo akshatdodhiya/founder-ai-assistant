@@ -63,3 +63,9 @@ def test_search_plan_defaults() -> None:
     assert plan.time_start_epoch is None
     assert plan.time_end_epoch is None
     assert plan.requires_action_only is False
+    assert plan.order_by == "similarity"
+
+
+def test_search_plan_rejects_unknown_order() -> None:
+    with pytest.raises(ValidationError):
+        SearchPlan(semantic_query="customer issue", order_by="rank")

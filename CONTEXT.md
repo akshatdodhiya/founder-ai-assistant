@@ -33,10 +33,12 @@
 - Re-ingesting the same records never creates duplicates.
 - Requires Action and category on an email come from the source record. Ingestion does not reclassify them.
 - A low-confidence choice still uses the winning label.
+- A follow-up window other than none keeps an open thread only when its latest message also falls inside that window.
+- Similarity search uses the founder's question. A repeated customer issue searches for customer-problem wording instead of that raw question.
 - Classification and synthesis share one provider credential.
 
 ## Current System State
-- **Phase**: Architecture pivot for query routing is recorded. Router code is next.
+- **Phase**: Query routing is implemented. Synthesis is next.
 - **Active Data Sources**: Mock Google Calendar (`calendar.json`), Mock Gmail (`emails.json`).
 - **Target Provider**: OpenRouter. Question classification uses a typed decision model. Synthesis uses a chat model. Both use the same credential. A failed classification is retried once before a Planning Failure.
 - **Embeddings**: Local embedding model. Ingestion needs no API key; the first run downloads the model.

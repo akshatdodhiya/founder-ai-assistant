@@ -231,28 +231,28 @@ Document the classifier as **ADR-0007**. It does not fit inside ADR-0005. That A
 
 - [x] `/pivot` is done for multi-plan retrieval, ordering, time phrases, and per-thread follow-ups (ADR-0005, ADR-0002, ADR-0004).
 - [x] Write ADR-0007 and rewrite `ARCHITECTURE.md` section 4.3 so the frontier JSON planner is gone. Update `CONTEXT.md` with the classification rule only (no paths).
-- [ ] Bring `SearchPlan.order_by` in line with section 3. Add no other model fields.
-- [ ] Red: tests for `compute_windows` and `build_where`. No classifier.
-- [ ] Red: tests for `plan_query` and `retrieve` with a fake classifier returning labels.
-- [ ] Green: deterministic plan builder plus a thin Jev client. Key only from `os.getenv("OPENROUTER_API_KEY")` via `python-dotenv`. One `POST https://openrouter.ai/api/v1/systemone` call, model `typesafe/jev-1.13`.
-- [ ] On timeout or HTTP 429, retry the classifier once, then raise `PlanningFailure`. Never search without a plan. A missing key raises immediately.
-- [ ] Open-thread rule on every action-required email plan, including the focus-set email plan.
+- [x] Bring `SearchPlan.order_by` in line with section 3. Add no other model fields.
+- [x] Red: tests for `compute_windows` and `build_where`. No classifier.
+- [x] Red: tests for `plan_query` and `retrieve` with a fake classifier returning labels.
+- [x] Green: deterministic plan builder plus a thin Jev client. Key only from `os.getenv("OPENROUTER_API_KEY")` via `python-dotenv`. One `POST https://openrouter.ai/api/v1/systemone` call, model `typesafe/jev-1.13`.
+- [x] On timeout or HTTP 429, retry the classifier once, then raise `PlanningFailure`. Never search without a plan. A missing key raises immediately.
+- [x] Open-thread rule on every action-required email plan, including the focus-set email plan.
 
 **Acceptance (pytest checks)**
 
-- [ ] `build_where` with no filters returns `None`.
-- [ ] `build_where` with only `source_filter="email"` returns `{"source": "email"}` (no `$and`).
-- [ ] `build_where` with source, action, and epoch bounds returns one `$and` holding all four clauses.
-- [ ] A canned `focus_today` classification yields two plans: calendar in the day window, and action-required email in the day window.
-- [ ] `retrieve` on the evaluation corpus returns the focus set ids from the reference table, earliest first.
-- [ ] Follow-ups return `email_204`, `email_205`, `email_203` (latest message per open thread, earliest first).
-- [ ] A thread whose latest message has `requires_action: false` is excluded.
-- [ ] "What's my next meeting?" returns exactly `cal_001`.
-- [ ] The week window for the anchor is `1789948800`–`1790553599`.
-- [ ] `FOUNDER_REFERENCE_TIME` moves every window.
-- [ ] One classifier failure followed by a valid classification succeeds. Two failures raise `PlanningFailure`, and no search runs.
-- [ ] No test calls OpenRouter or Jev.
-- [ ] `pytest tests/` passes.
+- [x] `build_where` with no filters returns `None`.
+- [x] `build_where` with only `source_filter="email"` returns `{"source": "email"}` (no `$and`).
+- [x] `build_where` with source, action, and epoch bounds returns one `$and` holding all four clauses.
+- [x] A canned `focus_today` classification yields two plans: calendar in the day window, and action-required email in the day window.
+- [x] `retrieve` on the evaluation corpus returns the focus set ids from the reference table, earliest first.
+- [x] Follow-ups return `email_204`, `email_205`, `email_203` (latest message per open thread, earliest first).
+- [x] A thread whose latest message has `requires_action: false` is excluded.
+- [x] "What's my next meeting?" returns exactly `cal_001`.
+- [x] The week window for the anchor is `1789948800`–`1790553599`.
+- [x] `FOUNDER_REFERENCE_TIME` moves every window.
+- [x] One classifier failure followed by a valid classification succeeds. Two failures raise `PlanningFailure`, and no search runs.
+- [x] No test calls OpenRouter or Jev.
+- [x] `pytest tests/` passes.
 
 **Edge cases**
 
