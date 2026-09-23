@@ -1,4 +1,5 @@
 import hashlib
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +15,8 @@ from src.engine.classifier import (
 from src.engine.router import PlanningFailure, Router, build_where, compute_windows, compute_windows_from_env
 from src.models import ContextItem, SearchPlan
 from src.storage import ContextStore
+
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 ANCHOR = datetime(2026, 9, 23, 9, 0, tzinfo=timezone.utc)
@@ -315,3 +318,41 @@ def test_closed_thread_is_excluded(store: ContextStore) -> None:
     router = Router(FakeClassifier([Classification("follow_ups", "none")]))
 
     assert router.retrieve("What follow-ups am I missing?", store, ANCHOR) == []
+
+
+FOCUS_QUERY = "What should I focus on today?"
+FOCUS_IDS = ["email_205", "email_203", "cal_001", "cal_002", "cal_003"]
+
+load_dotenv()
+
+
+@pytest.mark.skipif(not os.getenv("OPENROUTER_API_KEY"), reason="OPENROUTER_API_KEY not set")
+def test_live_jev_focus_today(tmp_path: Path) -> None:
+    context_store = ContextStore(tmp_path / "chroma")
+    try:
+        meetings = MockCalendarConnector(ROOT / "data" / "calendar.json").fetch_records()
+        emails = MockGmailConnector(ROOT / "data" / "emails.json").fetch_records()
+        context_store.upsert(meetings + emails)
+        router = Router(JevClassifier.from_env())
+        plans = router.plan_query(FOCUS_QUERY, ANCHOR)
+        found = router.collect(plans, context_store)
+    finally:
+        context_store.close()
+
+    print(f"\nQuery: {FOCUS_QUERY}")
+    for index, plan in enumerate(plans, start=1):
+        print(f"Plan {index}")
+        print(f"  semantic_query: {plan.semantic_query}")
+        print(f"  source_filter: {plan.source_filter}")
+        print(f"  time_start_epoch: {plan.time_start_epoch}")
+        print(f"  time_end_epoch: {plan.time_end_epoch}")
+        print(f"  requires_action_only: {plan.requires_action_only}")
+        print(f"  order_by: {plan.order_by}")
+    print("Retrieved:")
+    for item in found:
+        print(f"- {item.id}")
+        print(f"  source: {item.source}")
+        print(f"  title: {item.title}")
+        print(f"  timestamp: {item.timestamp.isoformat()}")
+
+    assert [item.id for item in found] == FOCUS_IDS

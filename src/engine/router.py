@@ -94,9 +94,12 @@ class Router:
         raise PlanningFailure("classifier failed after one retry") from failure
 
     def retrieve(self, query: str, store: ContextStore, reference: datetime) -> list[ContextItem]:
+        return self.collect(self.plan_query(query, reference), store)
+
+    def collect(self, plans: list[SearchPlan], store: ContextStore) -> list[ContextItem]:
         found: list[ContextItem] = []
         seen: set[str] = set()
-        for plan in self.plan_query(query, reference):
+        for plan in plans:
             hits = _run_plan(store, plan)
             if plan.requires_action_only and plan.source_filter == "email":
                 hits = _open_threads(store, hits, plan)
