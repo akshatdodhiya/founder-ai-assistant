@@ -285,19 +285,19 @@ Document the classifier as **ADR-0007**. It does not fit inside ADR-0005. That A
 
 **Tasks**
 
-- [ ] Red: write the fallback and prompt-building tests first. Neither needs network access.
-- [ ] Green: implement the Chief-of-Staff system prompt with strict grounding rules.
-- [ ] Format each item in the prompt with its id, source, timestamp, title, and content.
-- [ ] Citation format: `[Calendar: <title>]` for meetings and `[Email from <sender>]` for emails.
-- [ ] Limit prompt size to what the retrieval returned (at most 5 items per plan).
+- [x] Red: write the fallback and prompt-building tests first. Neither needs network access.
+- [x] Green: implement the Chief-of-Staff system prompt with strict grounding rules.
+- [x] Format each item in the prompt with its id, source, timestamp, title, and content.
+- [x] Citation format: `[Calendar: <title>]` for meetings and `[Email from <sender>]` for emails.
+- [x] Limit prompt size to what the retrieval returned (at most 5 items per plan).
 
 **Acceptance (pytest checks)**
 
-- [ ] An empty context list returns exactly: *"I do not have sufficient context in your calendar or emails to answer this."* No LLM call is made.
-- [ ] The built prompt includes every retrieved item's title and no items that were not retrieved.
-- [ ] With the LLM client replaced at the boundary, the returned text is passed through unchanged.
-- [ ] LLM failures raise a typed error rather than returning invented text.
-- [ ] `pytest tests/` passes.
+- [x] An empty context list returns exactly: *"I do not have sufficient context in your calendar or emails to answer this."* No LLM call is made.
+- [x] The built prompt includes every retrieved item's title and no items that were not retrieved.
+- [x] With the LLM client replaced at the boundary, the returned text is passed through unchanged.
+- [x] LLM failures raise a typed error rather than returning invented text.
+- [x] `pytest tests/` passes.
 
 **Edge cases**
 

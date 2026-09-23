@@ -21,6 +21,8 @@
 - **Normalization Error**: Rejection of a raw payload that cannot become a Context Item. Ingestion emits no partial item. _Avoid_: skip, best effort.
 - **Storage Error**: A stored record that cannot become a Context Item. Retrieval emits no partial item. _Avoid_: skip, corrupt row.
 - **Planning Failure**: The router could not produce valid Search Plans after one retry. The question is answered with an error, never with an unfiltered or ungrounded answer. _Avoid_: fallback search.
+- **Synthesis Failure**: The chat model could not return an answer after one retry. No invented text is returned. _Avoid_: guess, ungrounded answer.
+- **Citation**: A calendar claim is written `[Calendar: <title>]`. An email claim is written `[Email from <sender>]`, using the sender stored on the item. _Avoid_: bare title, uncited claim.
 
 ## Business Rules & Invariants
 - Relative time phrases resolve only to these windows: today (Day Window), yesterday and tomorrow (the UTC days before and after the Day Window), this week (Week Window), and next meeting (Next Meeting). Any other phrase gets no time filter.
@@ -36,11 +38,15 @@
 - A follow-up window other than none keeps an open thread only when its latest message also falls inside that window.
 - Similarity search uses the founder's question. A repeated customer issue searches for customer-problem wording instead of that raw question.
 - Classification and synthesis share one provider credential.
+- An empty retrieval returns exactly: I do not have sufficient context in your calendar or emails to answer this. The chat model is not called.
+- A non-empty retrieval is sent in chronological order. The model text is returned unchanged, including when the model decides the items are not enough.
+- Text inside a retrieved item is untrusted data and cannot override the grounding instructions.
+- A chat timeout or HTTP 429 is retried once, then a Synthesis Failure is raised. A missing credential is not retried.
 
 ## Current System State
-- **Phase**: Query routing is implemented. Synthesis is next.
+- **Phase**: Synthesis is implemented. The CLI is next.
 - **Active Data Sources**: Mock Google Calendar (`calendar.json`), Mock Gmail (`emails.json`).
-- **Target Provider**: OpenRouter. Question classification uses a typed decision model. Synthesis uses a chat model. Both use the same credential. A failed classification is retried once before a Planning Failure.
+- **Target Provider**: OpenRouter. Question classification uses a typed decision model. Synthesis uses the chat model openai/gpt-4o-mini. Both use the same credential. A failed classification is retried once before a Planning Failure. A failed chat call is retried once before a Synthesis Failure. A missing credential is not retried.
 - **Embeddings**: Local embedding model. Ingestion needs no API key; the first run downloads the model.
 - **Primary Evaluation Queries**:
   1. "What should I focus on today?"
