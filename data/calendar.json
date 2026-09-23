@@ -1,0 +1,42 @@
+[
+  {
+    "id": "001",
+    "summary": "Engineering standup",
+    "start_time": "2026-09-23T13:00:00Z",
+    "end_time": "2026-09-23T13:30:00Z",
+    "attendees": ["Alex (Tech Lead)", "Priya Shah"],
+    "description": "Internal sync. Confirm the checkout hotfix owner before the Acme call."
+  },
+  {
+    "id": "002",
+    "summary": "Acme checkout bug review",
+    "start_time": "2026-09-23T16:00:00Z",
+    "end_time": "2026-09-23T16:45:00Z",
+    "attendees": ["Jordan Hale (Acme)", "Alex (Tech Lead)"],
+    "description": "Customer call. Acme still cannot complete EU checkout after the retry change."
+  },
+  {
+    "id": "003",
+    "summary": "Northstar Ventures check-in",
+    "start_time": "2026-09-23T18:30:00Z",
+    "end_time": "2026-09-23T19:00:00Z",
+    "attendees": ["Maya Chen (Northstar Ventures)"],
+    "description": "Investor call. Maya wants the updated deck and August metrics before the partner meeting."
+  },
+  {
+    "id": "004",
+    "summary": "Design critique",
+    "start_time": "2026-09-22T15:00:00Z",
+    "end_time": "2026-09-22T16:00:00Z",
+    "attendees": ["Priya Shah"],
+    "description": "Yesterday's review of the billing settings page. Not on today's calendar."
+  },
+  {
+    "id": "005",
+    "summary": "Board prep",
+    "start_time": "2026-09-24T15:00:00Z",
+    "end_time": "2026-09-24T16:00:00Z",
+    "attendees": ["Alex (Tech Lead)", "Priya Shah"],
+    "description": "Tomorrow's working session to assemble the board narrative."
+  }
+]

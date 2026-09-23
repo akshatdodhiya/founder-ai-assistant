@@ -1,0 +1,12 @@
+[
+  {
+    "id": "102",
+    "thread_id": "thr_9",
+    "sender": "Alex",
+    "subject": "Need the deck",
+    "date": "2026-09-23T14:30:00Z",
+    "body": "Can you send the investor deck today?",
+    "requires_action": true,
+    "category": "investor"
+  }
+]

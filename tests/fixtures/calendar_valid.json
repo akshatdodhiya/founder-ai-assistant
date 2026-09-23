@@ -1,0 +1,10 @@
+[
+  {
+    "id": "001",
+    "summary": "Sprint Planning",
+    "start_time": "2026-09-23T15:00:00Z",
+    "end_time": "2026-09-23T16:00:00Z",
+    "attendees": ["Alex", "Priya"],
+    "description": "Scope the week"
+  }
+]
