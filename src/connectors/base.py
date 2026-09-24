@@ -1,5 +1,6 @@
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -20,17 +21,29 @@ class BaseConnector(ABC):
         """Return every normalized record, or raise if any record is invalid."""
 
 
+def normalize_records(path: Path, build: Callable[[dict[str, Any]], ContextItem]) -> list[ContextItem]:
+    items: list[ContextItem] = []
+    for index, record in enumerate(load_records(path)):
+        try:
+            items.append(build(record))
+        except NormalizationError as exc:
+            record_id = record.get("id")
+            label = f"record {index} (id {record_id})" if isinstance(record_id, str) else f"record {index}"
+            raise NormalizationError(f"{path}: {label}: {exc}") from exc
+    return items
+
+
 def load_records(path: Path) -> list[dict[str, Any]]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise NormalizationError(f"cannot read payload from {path}") from exc
+        raise NormalizationError(f"{path}: cannot read payload") from exc
     if not isinstance(payload, list):
-        raise NormalizationError("payload must be a list of records")
+        raise NormalizationError(f"{path}: payload must be a list of records")
     records: list[dict[str, Any]] = []
     for index, record in enumerate(payload):
         if not isinstance(record, dict):
-            raise NormalizationError(f"record {index} must be an object")
+            raise NormalizationError(f"{path}: record {index} must be an object")
         records.append(record)
     return records
 
@@ -48,14 +61,13 @@ def require_str(record: dict[str, Any], field: str, *, allow_empty: bool = False
     return value
 
 
-def parse_timestamp(raw: object) -> datetime:
+def parse_timestamp(raw: object, field: str) -> datetime:
     if not isinstance(raw, str) or raw == "":
-        raise NormalizationError("timestamp must be an ISO 8601 string")
-    text = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+        raise NormalizationError(f"{field} must be an ISO 8601 string")
     try:
-        parsed = datetime.fromisoformat(text)
+        parsed = datetime.fromisoformat(raw)
     except ValueError as exc:
-        raise NormalizationError("unparseable timestamp") from exc
+        raise NormalizationError(f"{field} is not a valid ISO 8601 timestamp") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise NormalizationError("timestamp must be timezone-aware")
+        raise NormalizationError(f"{field} must be timezone-aware")
     return parsed

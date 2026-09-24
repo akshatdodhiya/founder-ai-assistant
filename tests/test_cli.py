@@ -111,7 +111,8 @@ def test_normalization_error_stops_startup(
 
     captured = capsys.readouterr()
     assert code != 0
-    assert "emails.json" in captured.err
+    assert captured.err.count("emails.json") == 1
+    assert "record 0 (id 901)" in captured.err
     assert "missing required fields: body" in captured.err
     assert "Traceback" not in captured.err
     assert FAKE_KEY not in captured.out + captured.err

@@ -43,10 +43,7 @@ def load_sources(data_dir: Path) -> list[ContextItem]:
     )
     items: list[ContextItem] = []
     for connector in connectors:
-        try:
-            items.extend(connector.fetch_records())
-        except NormalizationError as exc:
-            raise NormalizationError(f"{connector.path}: {exc}") from exc
+        items.extend(connector.fetch_records())
     return items
 
 

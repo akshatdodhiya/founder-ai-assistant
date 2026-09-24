@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -61,5 +62,34 @@ def test_calendar_missing_start_time_raises() -> None:
 def test_email_naive_date_raises() -> None:
     connector = MockGmailConnector(FIXTURES / "email_naive_date.json")
 
-    with pytest.raises(NormalizationError):
+    with pytest.raises(NormalizationError) as caught:
         connector.fetch_records()
+
+    assert str(caught.value).count("email_naive_date.json") == 1
+
+
+def test_calendar_unparseable_end_time_raises(tmp_path: Path) -> None:
+    record = json.loads((FIXTURES / "calendar_valid.json").read_text(encoding="utf-8"))[0]
+    record["end_time"] = "not a time"
+    path = tmp_path / "calendar.json"
+    path.write_text(json.dumps([record]), encoding="utf-8")
+
+    with pytest.raises(NormalizationError):
+        MockCalendarConnector(path).fetch_records()
+
+
+def test_error_names_file_and_failing_record(tmp_path: Path) -> None:
+    good = json.loads((FIXTURES / "email_valid.json").read_text(encoding="utf-8"))[0]
+    bad = {key: value for key, value in good.items() if key != "body"}
+    bad["id"] = "902"
+    path = tmp_path / "emails.json"
+    path.write_text(json.dumps([good, bad]), encoding="utf-8")
+
+    with pytest.raises(NormalizationError) as caught:
+        MockGmailConnector(path).fetch_records()
+
+    message = str(caught.value)
+    assert message.count("emails.json") == 1
+    assert "record 1" in message
+    assert "902" in message
+    assert "missing required fields: body" in message

@@ -1,9 +1,10 @@
 from pathlib import Path
+from typing import Any
 
 from src.connectors.base import (
     BaseConnector,
     NormalizationError,
-    load_records,
+    normalize_records,
     parse_timestamp,
     require_fields,
     require_str,
@@ -18,34 +19,33 @@ class MockGmailConnector(BaseConnector):
         super().__init__(path or Path("data/emails.json"))
 
     def fetch_records(self) -> list[ContextItem]:
-        items: list[ContextItem] = []
-        for record in load_records(self.path):
-            require_fields(record, _EMAIL_FIELDS)
-            requires_action = record["requires_action"]
-            if not isinstance(requires_action, bool):
-                raise NormalizationError("requires_action must be a boolean")
-            timestamp = parse_timestamp(record["date"])
-            subject = require_str(record, "subject")
-            sender = require_str(record, "sender")
-            body = require_str(record, "body", allow_empty=True)
-            category = require_str(record, "category")
-            raw_id = require_str(record, "id")
-            thread_id = require_str(record, "thread_id")
-            items.append(
-                ContextItem(
-                    id=f"email_{raw_id}",
-                    source="email",
-                    timestamp=timestamp,
-                    title=subject,
-                    content=f"Subject: {subject}\nFrom: {sender}\n\n{body}",
-                    metadata={
-                        "source": "email",
-                        "timestamp_epoch": int(timestamp.timestamp()),
-                        "sender": sender,
-                        "thread_id": thread_id,
-                        "requires_action": requires_action,
-                        "category": category,
-                    },
-                )
-            )
-        return items
+        return normalize_records(self.path, _to_context_item)
+
+
+def _to_context_item(record: dict[str, Any]) -> ContextItem:
+    require_fields(record, _EMAIL_FIELDS)
+    requires_action = record["requires_action"]
+    if not isinstance(requires_action, bool):
+        raise NormalizationError("requires_action must be a boolean")
+    timestamp = parse_timestamp(record["date"], "date")
+    subject = require_str(record, "subject")
+    sender = require_str(record, "sender")
+    body = require_str(record, "body", allow_empty=True)
+    category = require_str(record, "category")
+    raw_id = require_str(record, "id")
+    thread_id = require_str(record, "thread_id")
+    return ContextItem(
+        id=f"email_{raw_id}",
+        source="email",
+        timestamp=timestamp,
+        title=subject,
+        content=f"Subject: {subject}\nFrom: {sender}\n\n{body}",
+        metadata={
+            "source": "email",
+            "timestamp_epoch": int(timestamp.timestamp()),
+            "sender": sender,
+            "thread_id": thread_id,
+            "requires_action": requires_action,
+            "category": category,
+        },
+    )
