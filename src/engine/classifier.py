@@ -1,11 +1,7 @@
-import json
-import os
-import urllib.error
-import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from dotenv import load_dotenv
+from src.engine.openrouter import TransportError, key_from_env, post_json, require_key
 
 _SYSTEMONE_URL = "https://openrouter.ai/api/v1/systemone"
 _MODEL = "typesafe/jev-1.13"
@@ -36,14 +32,6 @@ _QUESTIONS = {
 }
 
 
-class MissingAPIKeyError(Exception):
-    """OPENROUTER_API_KEY is not set."""
-
-
-class ClassifierTransportError(Exception):
-    """The classifier call timed out or was rate limited."""
-
-
 @dataclass(frozen=True)
 class Classification:
     intent: str
@@ -51,39 +39,17 @@ class Classification:
 
 
 def _post_systemone(api_key: str, payload: dict) -> dict:
-    request = urllib.request.Request(
-        _SYSTEMONE_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.load(response)
-    except TimeoutError as exc:
-        raise ClassifierTransportError("classifier timed out") from exc
-    except urllib.error.HTTPError as exc:
-        if exc.code == 429:
-            raise ClassifierTransportError("classifier rate limited") from exc
-        raise ClassifierTransportError(f"classifier HTTP {exc.code}") from exc
-    except urllib.error.URLError as exc:
-        raise ClassifierTransportError("classifier request failed") from exc
+    return post_json(_SYSTEMONE_URL, api_key, payload, label="classifier")
 
 
 class JevClassifier:
     def __init__(self, api_key: str | None, post: Callable[[str, dict], dict] | None = None) -> None:
-        if api_key is None or api_key == "":
-            raise MissingAPIKeyError("OPENROUTER_API_KEY is not set")
-        self._api_key = api_key
+        self._api_key = require_key(api_key)
         self._post = post or _post_systemone
 
     @classmethod
     def from_env(cls) -> "JevClassifier":
-        load_dotenv()
-        return cls(os.getenv("OPENROUTER_API_KEY"))
+        return cls(key_from_env())
 
     def classify(self, query: str) -> Classification:
         body = self._post(
@@ -92,7 +58,7 @@ class JevClassifier:
         )
         answers = body.get("answers")
         if not isinstance(answers, dict):
-            raise ClassifierTransportError("classifier response has no answers")
+            raise TransportError("classifier response has no answers")
         return Classification(
             intent=_choice(answers, "intent"),
             window=_choice(answers, "window"),
@@ -102,8 +68,8 @@ class JevClassifier:
 def _choice(answers: dict, name: str) -> str:
     answer = answers.get(name)
     if not isinstance(answer, dict):
-        raise ClassifierTransportError(f"classifier response missing {name}")
+        raise TransportError(f"classifier response missing {name}")
     choice = answer.get("choice")
     if not isinstance(choice, str) or choice == "":
-        raise ClassifierTransportError(f"classifier response missing {name} choice")
+        raise TransportError(f"classifier response missing {name} choice")
     return choice

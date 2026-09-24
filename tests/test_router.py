@@ -4,13 +4,9 @@ from pathlib import Path
 import pytest
 
 from src.connectors import MockCalendarConnector, MockGmailConnector
-from src.engine.classifier import (
-    Classification,
-    ClassifierTransportError,
-    JevClassifier,
-    MissingAPIKeyError,
-)
-from src.engine.router import PlanningFailure, Router, build_where, compute_windows, compute_windows_from_env
+from src.engine.classifier import Classification, JevClassifier
+from src.engine.openrouter import MissingAPIKeyError, TransportError
+from src.engine.router import PlanningFailure, Router, build_where, compute_windows, resolve_reference_time
 from src.models import ContextItem, SearchPlan
 from src.storage import ContextStore
 
@@ -67,7 +63,7 @@ def test_windows_for_anchor() -> None:
 def test_reference_time_override_moves_today(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FOUNDER_REFERENCE_TIME", "2026-09-24T09:00:00Z")
 
-    windows = compute_windows_from_env()
+    windows = compute_windows(resolve_reference_time())
 
     assert windows["today"] == (1790208000, 1790294399)
 
@@ -76,7 +72,7 @@ def test_naive_reference_time_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FOUNDER_REFERENCE_TIME", "2026-09-24T09:00:00")
 
     with pytest.raises(ValueError):
-        compute_windows_from_env()
+        compute_windows(resolve_reference_time())
 
 
 def test_build_where_empty_is_none() -> None:
@@ -200,7 +196,7 @@ def test_next_meeting_ignores_conflicting_window() -> None:
 
 def test_classifier_retries_once_then_succeeds() -> None:
     classifier = FakeClassifier(
-        [ClassifierTransportError("429"), Classification("general", "none")]
+        [TransportError("429"), Classification("general", "none")]
     )
     router = Router(classifier, sleep=lambda _seconds: None)
 
@@ -214,7 +210,7 @@ def test_classifier_retries_once_then_succeeds() -> None:
 
 def test_two_classifier_failures_do_not_search() -> None:
     classifier = FakeClassifier(
-        [ClassifierTransportError("429"), ClassifierTransportError("429")]
+        [TransportError("429"), TransportError("429")]
     )
     store = RecordingStore()
     router = Router(classifier, sleep=lambda _seconds: None)
@@ -227,7 +223,7 @@ def test_two_classifier_failures_do_not_search() -> None:
 
 def test_missing_api_key_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.setattr("src.engine.classifier.load_dotenv", lambda: False)
+    monkeypatch.setattr("src.engine.openrouter.load_dotenv", lambda: False)
 
     with pytest.raises(MissingAPIKeyError):
         JevClassifier.from_env()

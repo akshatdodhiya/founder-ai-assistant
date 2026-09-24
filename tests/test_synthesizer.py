@@ -5,11 +5,10 @@ import pytest
 
 from src.connectors import MockCalendarConnector, MockGmailConnector
 from src.engine.classifier import JevClassifier
+from src.engine.openrouter import MissingAPIKeyError, TransportError
 from src.engine.router import Router
 from src.engine.synthesizer import (
     FALLBACK,
-    ChatTransportError,
-    MissingAPIKeyError,
     OpenRouterChat,
     SynthesisFailure,
     Synthesizer,
@@ -159,7 +158,7 @@ def test_model_text_is_unchanged() -> None:
 
 def test_chat_retries_once_then_succeeds() -> None:
     canned = "Standup at 13:00 [Calendar: Engineering standup]."
-    client = FakeChat([ChatTransportError("429"), canned])
+    client = FakeChat([TransportError("429"), canned])
     item = _item(
         item_id="cal_001",
         source="calendar",
@@ -175,7 +174,7 @@ def test_chat_retries_once_then_succeeds() -> None:
 
 
 def test_two_chat_failures_raise() -> None:
-    client = FakeChat([ChatTransportError("429"), ChatTransportError("timeout")])
+    client = FakeChat([TransportError("429"), TransportError("timeout")])
     item = _item(
         item_id="cal_001",
         source="calendar",
@@ -196,7 +195,7 @@ def test_missing_message_text_raises() -> None:
 
     chat = OpenRouterChat("test-key", post=post)
 
-    with pytest.raises(ChatTransportError):
+    with pytest.raises(TransportError):
         chat.complete("system", "user")
 
 
@@ -234,7 +233,7 @@ def test_missing_api_key_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None
     assert calls["n"] == 0
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.setattr("src.engine.synthesizer.load_dotenv", lambda: False)
+    monkeypatch.setattr("src.engine.openrouter.load_dotenv", lambda: False)
 
     with pytest.raises(MissingAPIKeyError):
         OpenRouterChat.from_env()

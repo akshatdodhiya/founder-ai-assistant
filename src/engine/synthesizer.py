@@ -1,13 +1,8 @@
-import json
-import os
 import time
-import urllib.error
-import urllib.request
 from collections.abc import Callable
 from typing import Protocol
 
-from dotenv import load_dotenv
-
+from src.engine.openrouter import TransportError, key_from_env, post_json, require_key, retry_once
 from src.models import ContextItem
 
 FALLBACK = "I do not have sufficient context in your calendar or emails to answer this."
@@ -35,14 +30,6 @@ class SynthesisFailure(Exception):
     """The chat model could not return a grounded answer."""
 
 
-class ChatTransportError(Exception):
-    """The chat call timed out or was rate limited."""
-
-
-class MissingAPIKeyError(Exception):
-    """OPENROUTER_API_KEY is not set."""
-
-
 class ChatCompleter(Protocol):
     def complete(self, system: str, user: str) -> str: ...
 
@@ -55,15 +42,12 @@ def build_prompt(query: str, items: list[ContextItem]) -> str:
 
 class OpenRouterChat:
     def __init__(self, api_key: str | None, post: Callable[[str, dict], dict] | None = None) -> None:
-        if api_key is None or api_key == "":
-            raise MissingAPIKeyError("OPENROUTER_API_KEY is not set")
-        self._api_key = api_key
+        self._api_key = require_key(api_key)
         self._post = post or _post_chat
 
     @classmethod
     def from_env(cls) -> "OpenRouterChat":
-        load_dotenv()
-        return cls(os.getenv("OPENROUTER_API_KEY"))
+        return cls(key_from_env())
 
     def complete(self, system: str, user: str) -> str:
         body = self._post(
@@ -88,17 +72,12 @@ class Synthesizer:
         if not items:
             return FALLBACK
         user = build_prompt(query, items)
-        failure: ChatTransportError | None = None
-        for attempt in (1, 2):
-            try:
-                return self.client.complete(_SYSTEM_PROMPT, user)
-            except ChatTransportError as exc:
-                failure = exc
-                if attempt == 1:
-                    self._sleep(1)
-                    continue
-                raise SynthesisFailure("chat failed after one retry") from exc
-        raise SynthesisFailure("chat failed after one retry") from failure
+        return retry_once(
+            lambda: self.client.complete(_SYSTEM_PROMPT, user),
+            self._sleep,
+            SynthesisFailure,
+            "chat failed after one retry",
+        )
 
 
 def _block(item: ContextItem) -> str:
@@ -118,37 +97,17 @@ def _block(item: ContextItem) -> str:
 
 
 def _post_chat(api_key: str, payload: dict) -> dict:
-    request = urllib.request.Request(
-        _CHAT_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.load(response)
-    except TimeoutError as exc:
-        raise ChatTransportError("chat timed out") from exc
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:300]
-        if exc.code == 429:
-            raise ChatTransportError("chat rate limited") from exc
-        raise ChatTransportError(f"chat HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise ChatTransportError("chat request failed") from exc
+    return post_json(_CHAT_URL, api_key, payload, label="chat")
 
 
 def _message_text(body: dict) -> str:
     choices = body.get("choices")
     if not isinstance(choices, list) or not choices:
-        raise ChatTransportError("chat response has no choices")
+        raise TransportError("chat response has no choices")
     message = choices[0].get("message") if isinstance(choices[0], dict) else None
     if not isinstance(message, dict):
-        raise ChatTransportError("chat response has no message")
+        raise TransportError("chat response has no message")
     content = message.get("content")
     if not isinstance(content, str) or content == "":
-        raise ChatTransportError("chat response has no message text")
+        raise TransportError("chat response has no message text")
     return content

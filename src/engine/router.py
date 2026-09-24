@@ -2,9 +2,11 @@ import os
 import time
 from collections.abc import Callable
 from datetime import date, datetime, timezone
+from typing import Protocol
 
-from src.engine.classifier import Classification, ClassifierTransportError
-from src.models import ContextItem, SearchPlan
+from src.engine.classifier import Classification
+from src.engine.openrouter import retry_once
+from src.models import ContextItem, OrderBy, SearchPlan, Source
 from src.storage import ContextStore
 
 _ANCHOR = datetime(2026, 9, 23, 9, 0, tzinfo=timezone.utc)
@@ -17,13 +19,16 @@ class PlanningFailure(Exception):
     """The router could not produce valid Search Plans."""
 
 
+class Classifier(Protocol):
+    def classify(self, query: str) -> Classification: ...
+
+
 def resolve_reference_time() -> datetime:
     raw = os.getenv("FOUNDER_REFERENCE_TIME")
     if raw is None or raw == "":
         return _ANCHOR
-    text = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
     try:
-        parsed = datetime.fromisoformat(text)
+        parsed = datetime.fromisoformat(raw)
     except ValueError as exc:
         raise ValueError("FOUNDER_REFERENCE_TIME must be an ISO 8601 timestamp") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
@@ -45,10 +50,6 @@ def compute_windows(reference: datetime) -> dict[str, tuple[int, int | None]]:
         "this_week": (_day_bounds(monday)[0], _day_bounds(sunday)[1]),
         "next_meeting": (int(current.timestamp()) + 1, None),
     }
-
-
-def compute_windows_from_env() -> dict[str, tuple[int, int | None]]:
-    return compute_windows(resolve_reference_time())
 
 
 def build_where(plan: SearchPlan) -> dict | None:
@@ -75,23 +76,18 @@ def build_where(plan: SearchPlan) -> dict | None:
 
 
 class Router:
-    def __init__(self, classifier: object, sleep: Callable[[float], None] | None = None) -> None:
+    def __init__(self, classifier: Classifier, sleep: Callable[[float], None] | None = None) -> None:
         self.classifier = classifier
         self._sleep = sleep or time.sleep
 
     def plan_query(self, query: str, reference: datetime) -> list[SearchPlan]:
-        failure: ClassifierTransportError | None = None
-        for attempt in (1, 2):
-            try:
-                classification = self.classifier.classify(query)  # type: ignore[attr-defined]
-            except ClassifierTransportError as exc:
-                failure = exc
-                if attempt == 1:
-                    self._sleep(1)
-                    continue
-                raise PlanningFailure("classifier failed after one retry") from exc
-            return _plans(classification, query, reference)
-        raise PlanningFailure("classifier failed after one retry") from failure
+        classification = retry_once(
+            lambda: self.classifier.classify(query),
+            self._sleep,
+            PlanningFailure,
+            "classifier failed after one retry",
+        )
+        return _plans(classification, query, reference)
 
     def retrieve(self, query: str, store: ContextStore, reference: datetime) -> list[ContextItem]:
         return self.collect(self.plan_query(query, reference), store)
@@ -143,20 +139,20 @@ def _selected_window(
 
 def _plan(
     semantic_query: str,
-    source: str | None,
+    source: Source | None,
     start: int | None,
     end: int | None,
     *,
     action: bool,
-    order_by: str,
+    order_by: OrderBy,
 ) -> SearchPlan:
     return SearchPlan(
         semantic_query=semantic_query,
-        source_filter=source,  # type: ignore[arg-type]
+        source_filter=source,
         time_start_epoch=start,
         time_end_epoch=end,
         requires_action_only=action,
-        order_by=order_by,  # type: ignore[arg-type]
+        order_by=order_by,
     )
 
 
@@ -169,6 +165,8 @@ def _run_plan(store: ContextStore, plan: SearchPlan) -> list[ContextItem]:
 
 
 def _is_next_meeting(plan: SearchPlan) -> bool:
+    # SearchPlan has no limit field (ADR-0005, ADR-0007), so the next-meeting plan is recognized by shape.
+    # Any new calendar plan with only a start bound would also be limited to one item.
     return plan.source_filter == "calendar" and plan.time_end_epoch is None and plan.time_start_epoch is not None
 
 

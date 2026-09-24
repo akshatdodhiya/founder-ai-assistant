@@ -8,9 +8,8 @@ from dotenv import load_dotenv
 
 from src.connectors import BaseConnector, MockCalendarConnector, MockGmailConnector, NormalizationError
 from src.engine.classifier import JevClassifier
-from src.engine.classifier import MissingAPIKeyError as ClassifierKeyError
+from src.engine.openrouter import MissingAPIKeyError
 from src.engine.router import PlanningFailure, Router, resolve_reference_time
-from src.engine.synthesizer import MissingAPIKeyError as ChatKeyError
 from src.engine.synthesizer import OpenRouterChat, SynthesisFailure, Synthesizer
 from src.models import ContextItem
 from src.storage import ContextStore, StorageError
@@ -111,7 +110,7 @@ def main(
     try:
         classifier = JevClassifier(api_key)
         chat = OpenRouterChat(api_key)
-    except (ClassifierKeyError, ChatKeyError):
+    except MissingAPIKeyError:
         print(_KEY_HELP, file=sys.stderr)
         return 1
     try:
