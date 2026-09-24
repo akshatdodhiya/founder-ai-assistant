@@ -1,9 +1,7 @@
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from dotenv import load_dotenv
 
 from src.connectors import MockCalendarConnector, MockGmailConnector
 from src.engine.classifier import JevClassifier
@@ -265,12 +263,10 @@ EXPECTED_IDS = {
 }
 REPEATED_ISSUE_IDS = {"email_201", "email_202", "email_203"}
 
-load_dotenv()
 
-
-@pytest.mark.skipif(not os.getenv("OPENROUTER_API_KEY"), reason="OPENROUTER_API_KEY not set")
-def test_live_synthesis_evaluation_queries(tmp_path: Path) -> None:
-    chat = _CountingChat(OpenRouterChat.from_env())
+@pytest.mark.live
+def test_live_synthesis_evaluation_queries(tmp_path: Path, openrouter_key: str) -> None:
+    chat = _CountingChat(OpenRouterChat(openrouter_key))
     synthesizer = Synthesizer(chat)
 
     assert synthesizer.answer("What should I focus on today?", []) == FALLBACK
@@ -281,7 +277,7 @@ def test_live_synthesis_evaluation_queries(tmp_path: Path) -> None:
         meetings = MockCalendarConnector(ROOT / "data" / "calendar.json").fetch_records()
         emails = MockGmailConnector(ROOT / "data" / "emails.json").fetch_records()
         context_store.upsert(meetings + emails)
-        router = Router(JevClassifier.from_env())
+        router = Router(JevClassifier(openrouter_key))
         for query in EVAL_QUERIES:
             found = router.retrieve(query, context_store, ANCHOR)
             answer = synthesizer.answer(query, found)

@@ -1,5 +1,3 @@
-import hashlib
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,26 +14,12 @@ from src.engine.router import PlanningFailure, Router, build_where, compute_wind
 from src.models import ContextItem, SearchPlan
 from src.storage import ContextStore
 
-from dotenv import load_dotenv
-
 ROOT = Path(__file__).resolve().parents[1]
 ANCHOR = datetime(2026, 9, 23, 9, 0, tzinfo=timezone.utc)
 TODAY = (1790121600, 1790207999)
 WEEK = (1789948800, 1790553599)
 NEXT_START = 1790154001
 REPEAT_QUERY = "customer issue bug error complaint"
-
-
-class DeterministicEmbeddingFunction:
-    def name(self) -> str:
-        return "deterministic"
-
-    def __call__(self, input: list[str]) -> list[list[float]]:
-        vectors: list[list[float]] = []
-        for text in input:
-            digest = hashlib.sha256(text.encode("utf-8")).digest()
-            vectors.append([byte / 255.0 for byte in digest[:32]])
-        return vectors
 
 
 class FakeClassifier:
@@ -62,13 +46,6 @@ class RecordingStore:
     def fetch(self, where: dict | None = None, limit: int | None = None) -> list[ContextItem]:
         self.calls += 1
         return []
-
-
-@pytest.fixture
-def store(tmp_path: Path):
-    context_store = ContextStore(tmp_path / "chroma", embedding_function=DeterministicEmbeddingFunction())
-    yield context_store
-    context_store.close()
 
 
 def _load_eval(store: ContextStore) -> None:
@@ -323,17 +300,15 @@ def test_closed_thread_is_excluded(store: ContextStore) -> None:
 FOCUS_QUERY = "What should I focus on today?"
 FOCUS_IDS = ["email_205", "email_203", "cal_001", "cal_002", "cal_003"]
 
-load_dotenv()
 
-
-@pytest.mark.skipif(not os.getenv("OPENROUTER_API_KEY"), reason="OPENROUTER_API_KEY not set")
-def test_live_jev_focus_today(tmp_path: Path) -> None:
+@pytest.mark.live
+def test_live_jev_focus_today(tmp_path: Path, openrouter_key: str) -> None:
     context_store = ContextStore(tmp_path / "chroma")
     try:
         meetings = MockCalendarConnector(ROOT / "data" / "calendar.json").fetch_records()
         emails = MockGmailConnector(ROOT / "data" / "emails.json").fetch_records()
         context_store.upsert(meetings + emails)
-        router = Router(JevClassifier.from_env())
+        router = Router(JevClassifier(openrouter_key))
         plans = router.plan_query(FOCUS_QUERY, ANCHOR)
         found = router.collect(plans, context_store)
     finally:

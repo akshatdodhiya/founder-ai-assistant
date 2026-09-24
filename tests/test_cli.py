@@ -1,7 +1,5 @@
-import hashlib
 import json
 import shutil
-from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,25 +20,6 @@ from src.storage import ContextStore
 
 ROOT = Path(__file__).resolve().parents[1]
 FAKE_KEY = "test-secret-key"
-
-
-class DeterministicEmbeddingFunction:
-    def name(self) -> str:
-        return "deterministic"
-
-    def __call__(self, input: list[str]) -> list[list[float]]:
-        vectors: list[list[float]] = []
-        for text in input:
-            digest = hashlib.sha256(text.encode("utf-8")).digest()
-            vectors.append([byte / 255.0 for byte in digest[:32]])
-        return vectors
-
-
-@pytest.fixture
-def store(tmp_path: Path) -> Iterator[ContextStore]:
-    context_store = ContextStore(tmp_path / "chroma", embedding_function=DeterministicEmbeddingFunction())
-    yield context_store
-    context_store.close()
 
 
 @pytest.fixture

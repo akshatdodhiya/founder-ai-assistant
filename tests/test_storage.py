@@ -1,4 +1,3 @@
-import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,20 +9,6 @@ from src.storage import ContextStore, StorageError
 
 DAY_START_EPOCH = 1790121600
 DAY_END_EPOCH = 1790207999
-
-
-class DeterministicEmbeddingFunction:
-    """Fixed-size embeddings so tests never download a model."""
-
-    def name(self) -> str:
-        return "deterministic"
-
-    def __call__(self, input: list[str]) -> list[list[float]]:
-        embeddings: list[list[float]] = []
-        for text in input:
-            digest = hashlib.sha256(text.encode("utf-8")).digest()
-            embeddings.append([byte / 255.0 for byte in digest[:32]])
-        return embeddings
 
 
 def _meeting(item_id: str, title: str, when: datetime, epoch: int) -> ContextItem:
@@ -97,14 +82,6 @@ EMAIL_OLD = _email(
 CORPUS = [CAL_TODAY, CAL_YESTERDAY, EMAIL_TODAY, EMAIL_OLD]
 
 
-@pytest.fixture
-def store(tmp_path: Path):
-    path = tmp_path / "chroma_db"
-    context_store = ContextStore(path, embedding_function=DeterministicEmbeddingFunction())
-    yield context_store
-    context_store.close()
-
-
 def test_upsert_is_idempotent(store: ContextStore) -> None:
     store.upsert(CORPUS)
     assert store.count() == 4
@@ -161,10 +138,10 @@ def test_fetch_unfiltered_returns_all_earliest_first(store: ContextStore) -> Non
     assert [item.id for item in results] == ["email_102", "cal_002", "email_101", "cal_001"]
 
 
-def test_data_survives_reopen(store: ContextStore, tmp_path: Path) -> None:
+def test_data_survives_reopen(store: ContextStore, tmp_path: Path, embedding: object) -> None:
     store.upsert(CORPUS)
     store.close()
-    reopened = ContextStore(tmp_path / "chroma_db", embedding_function=DeterministicEmbeddingFunction())
+    reopened = ContextStore(tmp_path / "chroma_db", embedding_function=embedding)
     try:
         assert reopened.count() == 4
         fetched = reopened.fetch(where=None)
