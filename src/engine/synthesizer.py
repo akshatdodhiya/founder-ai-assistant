@@ -83,19 +83,26 @@ class Synthesizer:
 
 
 def _block(item: ContextItem) -> str:
+    item_id = _neutralize(item.id).replace('"', "&quot;")
     lines = [
-        f'<context_item id="{item.id}">',
+        f'<context_item id="{item_id}">',
         f"source: {item.source}",
         f"timestamp: {item.timestamp.isoformat()}",
-        f"title: {item.title}",
+        "<untrusted>",
+        f"title: {_neutralize(item.title)}",
     ]
     sender = item.metadata.get("sender")
     if isinstance(sender, str) and sender != "":
-        lines.append(f"sender: {sender}")
+        lines.append(f"sender: {_neutralize(sender)}")
     lines.append("content:")
-    lines.append(f"<untrusted>\n{item.content}\n</untrusted>")
+    lines.append(_neutralize(item.content))
+    lines.append("</untrusted>")
     lines.append("</context_item>")
     return "\n".join(lines)
+
+
+def _neutralize(text: str) -> str:
+    return text.replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _post_chat(api_key: SecretStr, payload: dict) -> dict:
