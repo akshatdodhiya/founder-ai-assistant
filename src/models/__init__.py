@@ -3,18 +3,21 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+Source = Literal["calendar", "email"]
+OrderBy = Literal["similarity", "time"]
+
 
 class ContextItem(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     id: str = Field(..., description="Unique deterministic identifier (e.g., 'cal_001', 'email_102')")
-    source: Literal["calendar", "email"] = Field(..., description="Originating data source")
+    source: Source = Field(..., description="Originating data source")
     timestamp: datetime = Field(..., description="UTC ISO 8601 timestamp for temporal filtering")
     title: str = Field(..., description="Event summary or email subject")
     content: str = Field(..., description="Dense textual payload for vector embedding")
     metadata: dict[str, Any] = Field(
         default_factory=dict,
-        description="Flat primitives for metadata filtering (sender, attendees, category, requires_action)",
+        description="Flat primitives for metadata filtering (sender, thread_id, category, requires_action)",
     )
 
     @field_validator("timestamp")
@@ -28,7 +31,7 @@ class ContextItem(BaseModel):
     @classmethod
     def metadata_values_must_be_primitives(cls, value: dict[str, Any]) -> dict[str, Any]:
         for key, item in value.items():
-            if isinstance(item, bool) or isinstance(item, (str, int, float)):
+            if isinstance(item, (str, int, float, bool)):
                 continue
             raise ValueError(f"metadata[{key!r}] must be str, int, float, or bool")
         return value
@@ -36,19 +39,11 @@ class ContextItem(BaseModel):
 
 class SearchPlan(BaseModel):
     semantic_query: str = Field(..., description="Refined semantic string for vector search")
-    source_filter: Optional[Literal["calendar", "email"]] = Field(
-        None, description="Source restriction if query specifies"
-    )
+    source_filter: Optional[Source] = Field(None, description="Source restriction if query specifies")
     time_start_epoch: Optional[int] = Field(None, description="Unix epoch lower bound for filtering")
     time_end_epoch: Optional[int] = Field(None, description="Unix epoch upper bound for filtering")
-    requires_action_only: bool = Field(
-        False, description="Filter for unread/action-required emails or blockers"
-    )
-    order_by: Literal["similarity", "time"] = Field(
-        "similarity",
-        description="similarity uses vector search; time uses filter-only fetch, earliest first",
-    )
-    order_by: Literal["similarity", "time"] = Field(
+    requires_action_only: bool = Field(False, description="Filter for action-required emails")
+    order_by: OrderBy = Field(
         "similarity",
         description="similarity uses vector search; time uses filter-only fetch, earliest first",
     )
