@@ -5,7 +5,7 @@ import pytest
 
 from src.connectors import MockCalendarConnector, MockGmailConnector
 from src.engine.classifier import Classification, JevClassifier
-from src.engine.openrouter import MissingAPIKeyError, TransportError
+from src.engine.openrouter import MissingAPIKeyError, ResponseError, TransportError
 from src.engine.router import PlanningFailure, Router, build_where, compute_windows, resolve_reference_time
 from src.models import ContextItem, SearchPlan
 from src.storage import ContextStore
@@ -219,6 +219,39 @@ def test_two_classifier_failures_do_not_search() -> None:
         router.retrieve("status?", store, ANCHOR)
 
     assert store.calls == 0
+
+
+def test_response_error_fails_without_retry() -> None:
+    classifier = FakeClassifier(
+        [ResponseError("classifier HTTP 404: blocked by guardrail"), Classification("general", "none")]
+    )
+    store = RecordingStore()
+    router = Router(classifier, sleep=lambda _seconds: None)
+
+    with pytest.raises(PlanningFailure, match="blocked by guardrail"):
+        router.retrieve("status?", store, ANCHOR)
+
+    assert classifier.calls == 1
+    assert store.calls == 0
+
+
+def test_classifier_rejects_reply_without_answers() -> None:
+    classifier = JevClassifier("test-key", post=lambda _key, _payload: {"unexpected": True})
+
+    with pytest.raises(ResponseError):
+        classifier.classify("status?")
+
+
+def test_classifier_passes_a_hidden_key() -> None:
+    seen: list[object] = []
+
+    def post(api_key: object, payload: dict) -> dict:
+        seen.append(api_key)
+        return {"answers": {"intent": {"choice": "general"}, "window": {"choice": "none"}}}
+
+    JevClassifier("sk-test-secret", post=post).classify("status?")
+
+    assert "sk-test-secret" not in repr(seen[0])
 
 
 def test_missing_api_key_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:

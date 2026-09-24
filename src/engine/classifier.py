@@ -1,7 +1,9 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from src.engine.openrouter import TransportError, key_from_env, post_json, require_key
+from pydantic import SecretStr
+
+from src.engine.openrouter import ResponseError, key_from_env, post_json, require_key
 
 _SYSTEMONE_URL = "https://openrouter.ai/api/v1/systemone"
 _MODEL = "typesafe/jev-1.13"
@@ -38,12 +40,12 @@ class Classification:
     window: str
 
 
-def _post_systemone(api_key: str, payload: dict) -> dict:
+def _post_systemone(api_key: SecretStr, payload: dict) -> dict:
     return post_json(_SYSTEMONE_URL, api_key, payload, label="classifier")
 
 
 class JevClassifier:
-    def __init__(self, api_key: str | None, post: Callable[[str, dict], dict] | None = None) -> None:
+    def __init__(self, api_key: str | None, post: Callable[[SecretStr, dict], dict] | None = None) -> None:
         self._api_key = require_key(api_key)
         self._post = post or _post_systemone
 
@@ -56,9 +58,9 @@ class JevClassifier:
             self._api_key,
             {"model": _MODEL, "state": query, "questions": _QUESTIONS},
         )
-        answers = body.get("answers")
+        answers = body.get("answers") if isinstance(body, dict) else None
         if not isinstance(answers, dict):
-            raise TransportError("classifier response has no answers")
+            raise ResponseError("classifier response has no answers")
         return Classification(
             intent=_choice(answers, "intent"),
             window=_choice(answers, "window"),
@@ -68,8 +70,8 @@ class JevClassifier:
 def _choice(answers: dict, name: str) -> str:
     answer = answers.get(name)
     if not isinstance(answer, dict):
-        raise TransportError(f"classifier response missing {name}")
+        raise ResponseError(f"classifier response missing {name}")
     choice = answer.get("choice")
     if not isinstance(choice, str) or choice == "":
-        raise TransportError(f"classifier response missing {name} choice")
+        raise ResponseError(f"classifier response missing {name} choice")
     return choice

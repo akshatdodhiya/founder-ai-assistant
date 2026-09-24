@@ -2,10 +2,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 
 from src.connectors import MockCalendarConnector, MockGmailConnector
 from src.engine.classifier import JevClassifier
-from src.engine.openrouter import MissingAPIKeyError, TransportError
+from src.engine.openrouter import MissingAPIKeyError, ResponseError, TransportError
 from src.engine.router import Router
 from src.engine.synthesizer import (
     FALLBACK,
@@ -189,20 +190,43 @@ def test_two_chat_failures_raise() -> None:
     assert client.calls == 2
 
 
+def test_response_error_fails_without_retry() -> None:
+    client = FakeChat([ResponseError("chat HTTP 404: blocked by guardrail"), "unused"])
+    item = _item(
+        item_id="cal_001",
+        source="calendar",
+        title="Engineering standup",
+        hour=13,
+        content="Meeting: Engineering standup",
+    )
+
+    with pytest.raises(SynthesisFailure, match="blocked by guardrail"):
+        Synthesizer(client, sleep=lambda _seconds: None).answer("What's my next meeting?", [item])
+
+    assert client.calls == 1
+
+
 def test_missing_message_text_raises() -> None:
-    def post(api_key: str, payload: dict) -> dict:
+    def post(api_key: object, payload: dict) -> dict:
         return {"choices": []}
 
     chat = OpenRouterChat("test-key", post=post)
 
-    with pytest.raises(TransportError):
+    with pytest.raises(ResponseError):
+        chat.complete("system", "user")
+
+
+def test_non_object_reply_raises_response_error() -> None:
+    chat = OpenRouterChat("test-key", post=lambda _key, _payload: [])  # type: ignore[arg-type,return-value]
+
+    with pytest.raises(ResponseError):
         chat.complete("system", "user")
 
 
 def test_complete_sends_gpt_4o_mini_and_returns_message() -> None:
     seen: dict[str, object] = {}
 
-    def post(api_key: str, payload: dict) -> dict:
+    def post(api_key: SecretStr, payload: dict) -> dict:
         seen["key"] = api_key
         seen["payload"] = payload
         return {"choices": [{"message": {"content": "ok"}}]}
@@ -217,7 +241,10 @@ def test_complete_sends_gpt_4o_mini_and_returns_message() -> None:
         {"role": "system", "content": "sys"},
         {"role": "user", "content": "user"},
     ]
-    assert seen["key"] == "test-key"
+    key = seen["key"]
+    assert isinstance(key, SecretStr)
+    assert key.get_secret_value() == "test-key"
+    assert "test-key" not in repr(key)
 
 
 def test_missing_api_key_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:

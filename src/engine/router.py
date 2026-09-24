@@ -85,7 +85,7 @@ class Router:
             lambda: self.classifier.classify(query),
             self._sleep,
             PlanningFailure,
-            "classifier failed after one retry",
+            "classifier",
         )
         return _plans(classification, query, reference)
 

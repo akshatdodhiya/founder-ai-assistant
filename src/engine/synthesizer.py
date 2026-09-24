@@ -2,7 +2,9 @@ import time
 from collections.abc import Callable
 from typing import Protocol
 
-from src.engine.openrouter import TransportError, key_from_env, post_json, require_key, retry_once
+from pydantic import SecretStr
+
+from src.engine.openrouter import ResponseError, key_from_env, post_json, require_key, retry_once
 from src.models import ContextItem
 
 FALLBACK = "I do not have sufficient context in your calendar or emails to answer this."
@@ -41,7 +43,7 @@ def build_prompt(query: str, items: list[ContextItem]) -> str:
 
 
 class OpenRouterChat:
-    def __init__(self, api_key: str | None, post: Callable[[str, dict], dict] | None = None) -> None:
+    def __init__(self, api_key: str | None, post: Callable[[SecretStr, dict], dict] | None = None) -> None:
         self._api_key = require_key(api_key)
         self._post = post or _post_chat
 
@@ -76,7 +78,7 @@ class Synthesizer:
             lambda: self.client.complete(_SYSTEM_PROMPT, user),
             self._sleep,
             SynthesisFailure,
-            "chat failed after one retry",
+            "chat",
         )
 
 
@@ -96,18 +98,20 @@ def _block(item: ContextItem) -> str:
     return "\n".join(lines)
 
 
-def _post_chat(api_key: str, payload: dict) -> dict:
+def _post_chat(api_key: SecretStr, payload: dict) -> dict:
     return post_json(_CHAT_URL, api_key, payload, label="chat")
 
 
-def _message_text(body: dict) -> str:
+def _message_text(body: object) -> str:
+    if not isinstance(body, dict):
+        raise ResponseError("chat response is not a JSON object")
     choices = body.get("choices")
     if not isinstance(choices, list) or not choices:
-        raise TransportError("chat response has no choices")
+        raise ResponseError("chat response has no choices")
     message = choices[0].get("message") if isinstance(choices[0], dict) else None
     if not isinstance(message, dict):
-        raise TransportError("chat response has no message")
+        raise ResponseError("chat response has no message")
     content = message.get("content")
     if not isinstance(content, str) or content == "":
-        raise TransportError("chat response has no message text")
+        raise ResponseError("chat response has no message text")
     return content
