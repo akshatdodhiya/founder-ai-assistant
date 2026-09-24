@@ -132,6 +132,24 @@ def test_fetch_earliest_calendar_meeting(store: ContextStore) -> None:
     assert results == [CAL_YESTERDAY]
 
 
+def test_fetch_accepts_combined_epoch_range(store: ContextStore) -> None:
+    store.upsert(CORPUS)
+    results = store.fetch(where={"timestamp_epoch": {"$gte": DAY_START_EPOCH, "$lte": DAY_END_EPOCH}})
+    assert [item.id for item in results] == ["email_101", "cal_001"]
+
+
+def test_use_after_close_raises_storage_error(store: ContextStore) -> None:
+    store.upsert(CORPUS)
+    store.close()
+    with pytest.raises(StorageError):
+        store.count()
+    with pytest.raises(StorageError):
+        store.fetch()
+    with pytest.raises(StorageError):
+        store.search("deck")
+    store.close()
+
+
 def test_fetch_unfiltered_returns_all_earliest_first(store: ContextStore) -> None:
     store.upsert(CORPUS)
     results = store.fetch(where=None)

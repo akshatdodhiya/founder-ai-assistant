@@ -63,26 +63,28 @@ class ContextStore:
     def __init__(self, path: Path | None = None, embedding_function: Any | None = None) -> None:
         self.path = path or _DEFAULT_PATH
         self.path.mkdir(parents=True, exist_ok=True)
-        self._client = chromadb.PersistentClient(path=str(self.path))
+        client = chromadb.PersistentClient(path=str(self.path))
         create_kwargs: dict[str, Any] = {
             "name": _COLLECTION_NAME,
             "metadata": {"hnsw:space": "cosine"},
         }
         if embedding_function is not None:
             create_kwargs["embedding_function"] = _QueryCompatibleEmbedding(embedding_function)
-        self._collection: Collection = self._client.get_or_create_collection(**create_kwargs)
+        self._client: object | None = client
+        self._collection: Collection | None = client.get_or_create_collection(**create_kwargs)
 
     def upsert(self, items: list[ContextItem]) -> None:
         if not items:
             return
-        self._collection.upsert(
+        self._open_collection().upsert(
             ids=[item.id for item in items],
             documents=[item.content for item in items],
             metadatas=[{**item.metadata, "title": item.title} for item in items],
         )
 
     def search(self, query: str, n_results: int = 5, where: dict | None = None) -> list[ContextItem]:
-        available = self._collection.count()
+        collection = self._open_collection()
+        available = collection.count()
         if available == 0:
             return []
         kwargs: dict[str, Any] = {
@@ -92,7 +94,7 @@ class ContextStore:
         }
         if where is not None:
             kwargs["where"] = _normalize_where(where)
-        result = self._collection.query(**kwargs)
+        result = collection.query(**kwargs)
         ids = result["ids"][0] if result["ids"] else []
         documents = result["documents"][0] if result["documents"] else []
         metadatas = result["metadatas"][0] if result["metadatas"] else []
@@ -102,12 +104,13 @@ class ContextStore:
         ]
 
     def fetch(self, where: dict | None = None, limit: int | None = None) -> list[ContextItem]:
-        if self._collection.count() == 0:
+        collection = self._open_collection()
+        if collection.count() == 0:
             return []
         kwargs: dict[str, Any] = {"include": ["documents", "metadatas"]}
         if where is not None:
-            kwargs["where"] = where
-        result = self._collection.get(**kwargs)
+            kwargs["where"] = _normalize_where(where)
+        result = collection.get(**kwargs)
         ids = result["ids"] or []
         documents = result["documents"] or []
         metadatas = result["metadatas"] or []
@@ -121,11 +124,16 @@ class ContextStore:
         return items
 
     def count(self) -> int:
-        return self._collection.count()
+        return self._open_collection().count()
 
     def close(self) -> None:
-        self._client = None  # type: ignore[assignment]
-        self._collection = None  # type: ignore[assignment]
+        self._client = None
+        self._collection = None
+
+    def _open_collection(self) -> Collection:
+        if self._collection is None:
+            raise StorageError("context store is closed")
+        return self._collection
 
     def _to_context_item(self, item_id: str, document: str | None, metadata: dict[str, Any] | None) -> ContextItem:
         if document is None or metadata is None:
