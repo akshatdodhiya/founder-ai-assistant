@@ -251,7 +251,7 @@ Document the classifier as **ADR-0007**. It does not fit inside ADR-0005. That A
 - [x] The week window for the anchor is `1789948800`–`1790553599`.
 - [x] `FOUNDER_REFERENCE_TIME` moves every window.
 - [x] One classifier failure followed by a valid classification succeeds. Two failures raise `PlanningFailure`, and no search runs.
-- [x] No test calls OpenRouter or Jev.
+- [x] No default test run calls OpenRouter or Jev. The opt-in live tests run only with `pytest -m live`.
 - [x] `pytest tests/` passes.
 
 **Edge cases**

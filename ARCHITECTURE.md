@@ -21,7 +21,7 @@ A local context engine designed to ingest disparate operational feeds (Google Ca
 *(See ADR-0001, ADR-0006, ADR-0007)*
 
 ```text
-founder-assistant/
+founder-ai-assistant/
 ├── main.py                 # Thin launcher: python main.py / python main.py --test
 ├── data/
 │   ├── calendar.json       # Mock Google Calendar event payloads
@@ -34,23 +34,31 @@ founder-assistant/
 │   ├── connectors/         # BaseConnector interface and source adapters
 │   ├── storage/            # Persistent ChromaDB client and metadata indexer
 │   ├── engine/
+│   │   ├── openrouter.py   # Shared OpenRouter HTTP call, key handling, errors, and retry-once helper
 │   │   ├── classifier.py   # Jev question classification via OpenRouter System One
 │   │   ├── router.py       # Search plans built from classifier labels
 │   │   └── synthesizer.py  # Grounded response generation with source citations
 │   └── cli/
 │       └── main.py         # Interactive CLI loop and evaluation test harness
 ├── tests/
+│   ├── conftest.py         # Shared deterministic embedding, store fixture, and live-test key
+│   ├── fixtures/           # Raw payloads for connector unit tests
 │   ├── test_models.py
 │   ├── test_connectors.py
 │   ├── test_storage.py
+│   ├── test_openrouter.py
 │   ├── test_router.py
 │   ├── test_synthesizer.py
 │   └── test_cli.py
 ├── .env.example
+├── pytest.ini              # Live OpenRouter tests are deselected unless run with -m live
 ├── requirements.txt
+├── LICENSE
 ├── README.md
 ├── ASSESSMENT.md
 ├── ARCHITECTURE.md
+├── CONTEXT.md
+├── IMPLEMENTATION_PLAN.md
 ├── WORKFLOW.md
 └── AGENTS.md
 ```
@@ -103,7 +111,7 @@ class SearchPlan(BaseModel):
 
 * `BaseConnector(ABC)`: Defines abstract method `fetch_records() -> list[ContextItem]`.
 * Constructors accept a file path. The default paths are `data/calendar.json` and `data/emails.json`.
-* A raw record that is missing a required field, or whose timestamp is missing, unparseable, or naive, raises `NormalizationError`. `fetch_records()` emits no partial item.
+* A raw record that is missing a required field, or whose timestamp is missing, unparseable, or naive, raises `NormalizationError`. Calendar `end_time` is validated the same way as `start_time`. `fetch_records()` emits no partial item. The error names the file once, the record index, and the raw `id` when present.
 * An empty event description or email body is valid. Only a missing field is a `NormalizationError`.
 * `MockCalendarConnector(BaseConnector)`:
 
@@ -180,15 +188,18 @@ Direct vector search fails on relative temporal queries ("today", "this week", "
    * `order_by="time"` calls `fetch`.
    * Union results, drop duplicate ids, sort remaining items by timestamp.
 6. **Follow-ups**: After retrieving action-required emails, `fetch` every message in those threads. Keep a thread only when its latest message, of any kind, requires action. Represent the thread by that latest message. The same rule applies to every action-required email plan, including the email half of the focus set. *(See ADR-0004)*
-7. **Failure**: Timeout or HTTP 429 is retried once. A second failure raises a Planning Failure. A missing key is not retried. No unfiltered search is issued. There is no invalid-JSON retry, because Jev can only return the criteria keys that were sent.
+7. **Failure**: Timeout or HTTP 429 is retried once. A second failure raises a Planning Failure. Any other HTTP error, a connection failure, or a malformed reply raises a Planning Failure at once, without a retry. A missing key is not retried. No unfiltered search is issued. There is no invalid-JSON retry, because Jev can only return the criteria keys that were sent.
 
 ### 4.4 Synthesis Layer (`src/engine/synthesizer.py`)
 
 1. Ingests retrieved `ContextItem` chunks alongside the founder's original prompt.
-2. Calls OpenRouter LLM using an executive Chief-of-Staff system prompt.
+2. Calls OpenRouter chat completions (`openai/gpt-4o-mini`) using an executive Chief-of-Staff system prompt, with the same `OPENROUTER_API_KEY` as classification.
 3. **Grounding Invariant**: Answers must be strictly grounded in provided context chunks.
-4. **Attribution**: Every claim must cite the source (e.g., `[Calendar: Sprint Planning]` or `[Email from Alex (Tech Lead)]`).
-5. **No Hallucination Fallback**: If retrieved context is insufficient, state: *"I do not have sufficient context in your calendar or emails to answer this."*
+4. **Attribution**: Every claim must cite the source (e.g., `[Calendar: Sprint Planning]` or `[Email from Alex (Tech Lead)]`), using the stored title or sender exactly.
+5. **No Hallucination Fallback**: An empty retrieval returns *"I do not have sufficient context in your calendar or emails to answer this."* without calling the model. The prompt tells the model to give the same sentence when the items do not answer the question.
+6. **Untrusted item text**: Each item's title, sender, and content sit inside one `<untrusted>` block with `<` and `>` neutralized, so email text cannot close the block or override the instructions.
+7. **Answer format**: A plain-text briefing for the terminal: one opening sentence, then one numbered line per item in time order (time, title, one sentence, citation). No Markdown. The model text is returned unchanged.
+8. **Failure**: Timeout or HTTP 429 is retried once, then a Synthesis Failure is raised. Any other HTTP error, a connection failure, or a malformed reply raises a Synthesis Failure at once. A missing key is not retried.
 
 ---
 

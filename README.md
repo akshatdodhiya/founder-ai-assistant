@@ -74,10 +74,11 @@ Design decisions are recorded in `docs/adr/`. `ARCHITECTURE.md` is the full cont
 ## Tests
 
 ```bash
-uv run --python .venv python -m pytest tests/
+uv run --python .venv python -m pytest tests/            # offline suite
+uv run --python .venv python -m pytest tests/ -m live -s # live OpenRouter checks
 ```
 
-Unit and integration tests run against a real Chroma store in a temporary directory with a deterministic embedding function. The classifier and chat model are replaced only at the network boundary. Two opt-in live tests call OpenRouter when `OPENROUTER_API_KEY` is set and are skipped otherwise.
+Unit and integration tests run against a real Chroma store in a temporary directory with a deterministic embedding function. The classifier and chat model are replaced only at the network boundary, so the default run needs no key and spends no credits. The two live tests are deselected unless you pass `-m live`; they call OpenRouter with `OPENROUTER_API_KEY` and print the retrieved ids and answers for the evaluation questions.
 
 ## Tradeoffs
 

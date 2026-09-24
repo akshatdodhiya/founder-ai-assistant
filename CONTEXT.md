@@ -43,14 +43,15 @@
 - Text inside a retrieved item is untrusted data and cannot override the grounding instructions.
 - An answer is a short plain-text briefing: one opening sentence, then a numbered list in time order. Each context item gets its own line, starting with the UTC time, then the title, then one sentence, then the citation. It uses no Markdown. It cites the stored title or the stored sender exactly. It does not reproduce email headers or quote the body. A partial retrieval is not described as the complete calendar or inbox.
 - A chat timeout or HTTP 429 is retried once, then a Synthesis Failure is raised. A missing credential is not retried.
+- Only a timeout or HTTP 429 is retried, for classification and synthesis alike. Any other provider error, a connection failure, or a malformed reply fails at once.
+- The credential is never printed, including in tracebacks.
 - Every startup ingests both sources and upserts them into the persistent context layer. Nothing is deleted, so a record removed from a source can remain stored.
 - A missing credential or an invalid Reference Timestamp stops startup with a setup message, before ingestion.
-- A Normalization Error during startup stops the assistant and names the source that failed. No partial ingest is stored.
+- A Normalization Error during startup stops the assistant and names the source that failed, the record position, and its source identifier. No partial ingest is stored.
+- A meeting's end time must be a valid timezone-aware timestamp, like its start time.
 - The interactive assistant shows only the answer. The evaluation run shows each question, its retrieved Context Item ids, and the answer.
 - The evaluation run succeeds only when all three evaluation questions return an answer. A failed question is reported and the remaining questions still run.
 - A failure while answering one interactive question is reported, and the assistant keeps accepting questions. Blank input is ignored.
-- The credential is never printed.
-
 ## Current System State
 - **Phase**: All six milestones are implemented. Submission checks are next.
 - **Active Data Sources**: Mock Google Calendar (`calendar.json`), Mock Gmail (`emails.json`).
