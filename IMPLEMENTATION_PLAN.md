@@ -331,19 +331,19 @@ Document the classifier as **ADR-0007**. It does not fit inside ADR-0005. That A
 **Tasks**
 
 - [x] `/pivot` is done for the entrypoint (`python main.py`, `python main.py --test`).
-- [ ] On startup: load `.env`, check `OPENROUTER_API_KEY`, ingest both connectors, and upsert into storage.
-- [ ] REPL: read a question, retrieve, synthesize, print. Exit on `exit`, `quit`, or Ctrl+C.
-- [ ] `--test`: run the three questions from `CONTEXT.md` and print each answer with its retrieved ids.
-- [ ] Red and green for the pieces that can be tested without network: argument parsing, the missing-key error, and ingestion counts.
+- [x] On startup: load `.env`, check `OPENROUTER_API_KEY`, ingest both connectors, and upsert into storage.
+- [x] REPL: read a question, retrieve, synthesize, print. Exit on `exit`, `quit`, or Ctrl+C.
+- [x] `--test`: run the three questions from `CONTEXT.md` and print each answer with its retrieved ids.
+- [x] Red and green for the pieces that can be tested without network: argument parsing, the missing-key error, and ingestion counts.
 
 **Acceptance (pytest checks and manual runs)**
 
-- [ ] With no API key set, the CLI prints a clear setup message and exits non-zero, without a traceback.
-- [ ] Ingestion from `data/` upserts 11 items (5 meetings and 6 emails).
-- [ ] Running ingestion twice still leaves 11 items.
-- [ ] A `NormalizationError` from `data/` stops startup with the record problem shown.
-- [ ] Manual check: `--test` answers all three questions with citations to the expected ids.
-- [ ] `pytest tests/` passes.
+- [x] With no API key set, the CLI prints a clear setup message and exits non-zero, without a traceback.
+- [x] Ingestion from `data/` upserts 11 items (5 meetings and 6 emails).
+- [x] Running ingestion twice still leaves 11 items.
+- [x] A `NormalizationError` from `data/` stops startup with the record problem shown.
+- [x] Manual check: `--test` answers all three questions with citations to the expected ids.
+- [x] `pytest tests/` passes.
 
 **Edge cases**
 
@@ -362,6 +362,6 @@ Document the classifier as **ADR-0007**. It does not fit inside ADR-0005. That A
 ## Before submission
 
 - [ ] `pytest tests/` passes on a clean clone.
-- [ ] README lists the data sources, three or more example questions, tradeoffs, and future improvements.
+- [x] README lists the data sources, three or more example questions, tradeoffs, and future improvements.
 - [ ] No keys, tokens, or personal data in the repo or the Traces link.
-- [ ] `.env`, `chroma_db/`, and `.venv/` are gitignored.
+- [x] `.env`, `chroma_db/`, and `.venv/` are gitignored.

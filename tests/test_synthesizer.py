@@ -145,6 +145,15 @@ def test_model_text_is_unchanged() -> None:
     assert "Chief of Staff" in system
     assert "[Calendar: <title>]" in system
     assert "[Email from <sender>]" in system
+    assert "using the title exactly" in system
+    assert "using the sender line exactly" in system
+    assert "Do not reproduce email headers" in system
+    assert "do not quote the body" in system
+    assert "no Markdown" in system
+    assert "numbered list in time order" in system
+    assert "13:00 UTC, Engineering standup" in system
+    assert "one numbered item for every context item" in system
+    assert "not a complete calendar or inbox" in system
     assert FALLBACK in system
     assert "<untrusted>" in system
     assert item.title in user
