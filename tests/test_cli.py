@@ -174,6 +174,19 @@ def test_repl_ctrl_c_exits_cleanly() -> None:
     assert run_repl(lambda query: query, read=read, write=lambda _line: None) == 0
 
 
+def test_repl_ctrl_c_during_a_question_exits_cleanly() -> None:
+    asked: list[str] = []
+
+    def ask(query: str) -> str:
+        asked.append(query)
+        raise KeyboardInterrupt
+
+    code = run_repl(ask, read=_scripted(["What's my next meeting?", "never asked"]), write=lambda _line: None)
+
+    assert code == 0
+    assert asked == ["What's my next meeting?"]
+
+
 def test_evaluation_prints_ids_and_answers() -> None:
     asked: list[str] = []
     written: list[str] = []

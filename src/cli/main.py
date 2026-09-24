@@ -48,7 +48,11 @@ def load_sources(data_dir: Path) -> list[ContextItem]:
 
 
 def ingest(store: ContextStore, data_dir: Path) -> int:
-    store.upsert(load_sources(data_dir))
+    return _store_items(store, load_sources(data_dir))
+
+
+def _store_items(store: ContextStore, items: list[ContextItem]) -> int:
+    store.upsert(items)
     return store.count()
 
 
@@ -71,6 +75,9 @@ def run_repl(
             return 0
         try:
             write(ask(query))
+        except KeyboardInterrupt:
+            write("")
+            return 0
         except _QUESTION_ERRORS as exc:
             write(f"Error: {exc}")
 
@@ -123,8 +130,8 @@ def main(
 
     store = ContextStore(store_path)
     try:
-        store.upsert(items)
-        print(f"Loaded {store.count()} context items. Reference time: {reference.isoformat()}")
+        count = _store_items(store, items)
+        print(f"Loaded {count} context items. Reference time: {reference.isoformat()}")
         router = Router(classifier)
         synthesizer = Synthesizer(chat)
 
